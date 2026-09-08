@@ -1,0 +1,4 @@
+// Error demonstration
+let username = "Alice"
+say("Hello")
+say(invalid_var)

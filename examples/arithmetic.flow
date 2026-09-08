@@ -1,0 +1,11 @@
+// FlowLang Arithmetic & Conditionals
+let a = 10
+let b = 20
+let result = (a + b) * 2 - 10 / 2
+say("Result is:", result)
+
+if result > 50 {
+    say("Result is greater than 50!")
+} else {
+    say("Result is 50 or less.")
+}

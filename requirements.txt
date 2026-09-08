@@ -1,0 +1,4 @@
+# FlowLang Language Core
+# FlowLang uses standard library Python 3.10+ with zero required external dependencies.
+# Optional testing tool:
+# pytest>=7.0.0

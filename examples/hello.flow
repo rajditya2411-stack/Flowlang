@@ -1,0 +1,4 @@
+// FlowLang Hello World
+let greeting = "Hello, world from"
+let language = "FlowLang"
+say(greeting, language)
