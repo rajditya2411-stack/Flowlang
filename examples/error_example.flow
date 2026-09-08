@@ -1,4 +1,4 @@
-// Error demonstration
-let username = "Alice"
-say("Hello")
-say(invalid_var)
+# Error demonstration
+username = "Alice"
+print("Hello")
+print(invalid_var)

@@ -2,13 +2,15 @@
 
 FlowLang is a clean, hand-crafted interpreted programming language built from scratch in Python with zero external compiler dependencies.
 
+FlowLang features **Python-style syntax** (colons `:`, indentation-based blocks, direct assignments, `True`/`False`/`None`, `and`/`or`/`not`, `#` comments, and `print`).
+
 The language engine follows an explicit multi-stage architecture:
 ```
 FlowLang source code
         ↓
-     Lexer (Tokens + source locations)
+     Lexer (Indentation, Tokens & source locations)
         ↓
-     Parser (Recursive-descent)
+     Parser (Recursive-descent with Suites & Precedence)
         ↓
        AST (Pure structural data nodes)
         ↓
@@ -28,19 +30,19 @@ flowlang/
 ├── src/
 │   └── flowlang/
 │       ├── __init__.py      # Package metadata & version
-│       ├── tokens.py        # Token types and Token class
-│       ├── lexer.py         # Lexical analyzer
+│       ├── tokens.py        # Token types (INDENT, DEDENT, etc.) and Token class
+│       ├── lexer.py         # Lexical analyzer with Python indentation tracking
 │       ├── ast.py           # Abstract Syntax Tree node definitions
-│       ├── parser.py        # Recursive-descent parser with operator precedence
-│       ├── runtime.py       # Scopes (Environment), builtins (say), stringifier
-│       ├── interpreter.py   # Tree-walk AST evaluator
+│       ├── parser.py        # Recursive-descent parser with suites & operator precedence
+│       ├── runtime.py       # Scopes (Environment), builtins (print/say), stringifier
+│       ├── interpreter.py   # Tree-walk AST evaluator (short-circuit logic, math, control flow)
 │       ├── errors.py        # Structured error types with line/column pointers
 │       └── engine.py        # Clean pipeline facade (for CLI, REPL, & Playground API)
 │
 ├── tests/
-│   ├── test_lexer.py        # Lexer tests (valid syntax, malformed tokens, escapes)
-│   ├── test_parser.py       # Parser & AST tests (precedence, grouping, statements)
-│   ├── test_interpreter.py  # Evaluation tests (arithmetic, variables, blocks, control flow)
+│   ├── test_lexer.py        # Lexer tests (indentation, tokens, escapes, malformed input)
+│   ├── test_parser.py       # Parser & AST tests (suites, precedence, grouping, expressions)
+│   ├── test_interpreter.py  # Evaluation tests (arithmetic, variables, if/elif/else, while)
 │   ├── test_errors.py       # Error formatting and source pointer tests
 │   └── test_engine.py       # End-to-end pipeline execution tests
 │
@@ -89,11 +91,13 @@ Example session:
 FlowLang REPL (v0.1.0)
 Type 'exit' or press Ctrl+C to exit.
 
-flow> 2 + 3 * 4
-14
-flow> let x = 10
-flow> say(x * 2)
-20
+flow> a = 4
+flow> b = 4
+flow> a + b
+8
+flow> if a == b:
+...       print("Equal!")
+Equal!
 flow> exit
 Goodbye!
 ```
@@ -106,18 +110,18 @@ FlowLang does not expose raw Python stack traces. Errors include line numbers, c
 
 ```
 FlowLang RuntimeError: Undefined variable 'invalid_var'
-  at line 4, column 5
+  at line 4, column 7
 
-  4 | say(invalid_var)
-          ^
+  4 | print(invalid_var)
+            ^
 ```
 
 ---
 
 ## Running Tests
 
-All 52 tests run using Python's built-in `unittest`:
+All 43 tests run using Python's built-in `unittest`:
 
 ```bash
-python -m unittest discover tests
+python -m unittest discover tests -v
 ```

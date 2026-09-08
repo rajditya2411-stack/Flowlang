@@ -1,6 +1,7 @@
 """FlowLang Token Definitions.
 
 Defines all token types and the Token representation with source location tracking.
+Supports Python-like syntax including INDENT, DEDENT, colons, and logical keywords.
 """
 
 from enum import Enum, auto
@@ -14,18 +15,27 @@ class TokenType(Enum):
     STRING = auto()
     IDENTIFIER = auto()
 
-    # Keywords
-    LET = auto()
+    # Keywords & Literals
+    TRUE = auto()
+    FALSE = auto()
+    NONE = auto()
+
+    # Control Flow Keywords
     IF = auto()
+    ELIF = auto()
     ELSE = auto()
     WHILE = auto()
     FOR = auto()
-    FN = auto()
+    DEF = auto()
     RETURN = auto()
-    TRUE = auto()
-    FALSE = auto()
+    LET = auto()            # Optional backwards-compatibility
 
-    # Operators
+    # Logical Operators
+    AND = auto()
+    OR = auto()
+    NOT = auto()
+
+    # Arithmetic & Comparison Operators
     PLUS = auto()           # +
     MINUS = auto()          # -
     STAR = auto()           # *
@@ -40,34 +50,49 @@ class TokenType(Enum):
     GREATER_EQUAL = auto()  # >=
     BANG = auto()           # !
 
-    # Punctuation
-    LPAREN = auto()         # (
-    RPAREN = auto()         # )
-    LBRACE = auto()         # {
-    RBRACE = auto()         # }
-    LBRACKET = auto()       # [
-    RBRACKET = auto()       # ]
+    # Punctuation & Delimiters
+    COLON = auto()          # :
     COMMA = auto()          # ,
     DOT = auto()            # .
-    COLON = auto()          # :
     SEMICOLON = auto()      # ;
+    LPAREN = auto()         # (
+    RPAREN = auto()         # )
+    LBRACKET = auto()       # [
+    RBRACKET = auto()       # ]
+    LBRACE = auto()         # {
+    RBRACE = auto()         # }
 
-    # Structural
+    # Indentation & Structural
     NEWLINE = auto()
+    INDENT = auto()
+    DEDENT = auto()
     EOF = auto()
 
 
-# Keyword lookup table: easily extensible for new keywords
+# Keyword lookup table (Python-style keywords + ergonomic fallbacks)
 KEYWORDS: dict[str, TokenType] = {
-    "let": TokenType.LET,
+    # Python style
+    "True": TokenType.TRUE,
+    "False": TokenType.FALSE,
+    "None": TokenType.NONE,
     "if": TokenType.IF,
+    "elif": TokenType.ELIF,
     "else": TokenType.ELSE,
     "while": TokenType.WHILE,
     "for": TokenType.FOR,
-    "fn": TokenType.FN,
+    "def": TokenType.DEF,
     "return": TokenType.RETURN,
+    "and": TokenType.AND,
+    "or": TokenType.OR,
+    "not": TokenType.NOT,
+
+    # Fallbacks / aliases
     "true": TokenType.TRUE,
     "false": TokenType.FALSE,
+    "none": TokenType.NONE,
+    "nil": TokenType.NONE,
+    "fn": TokenType.DEF,
+    "let": TokenType.LET,
 }
 
 

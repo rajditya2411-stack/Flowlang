@@ -1,7 +1,8 @@
 """FlowLang Lexer.
 
 Converts raw source code into a stream of Token objects.
-Tracks line and column numbers accurately for friendly error reporting.
+Implements Python-style indentation tracking (INDENT, DEDENT, NEWLINE)
+and tracks line/column positions accurately for friendly error reporting.
 """
 
 from typing import Optional
@@ -10,7 +11,7 @@ from flowlang.errors import LexerError
 
 
 class Lexer:
-    """Lexical analyzer for FlowLang."""
+    """Lexical analyzer for FlowLang with Python-like indentation support."""
 
     def __init__(self, source: str):
         self.source = source
@@ -18,6 +19,9 @@ class Lexer:
         self.pos = 0
         self.line = 1
         self.column = 1
+        self.paren_level = 0
+        self.indent_stack = [0]
+        self.at_line_start = True
 
     def _peek(self, offset: int = 0) -> Optional[str]:
         """Look ahead without consuming."""
@@ -51,9 +55,19 @@ class Lexer:
         tokens: list[Token] = []
 
         while self.pos < self.length:
-            char = self._peek()
+            # Handle start-of-line indentation when not inside parentheses/brackets
+            if self.at_line_start:
+                self.at_line_start = False
+                indent_tokens = self._handle_indentation()
+                tokens.extend(indent_tokens)
+                if self.pos >= self.length:
+                    break
 
-            # Whitespace (spaces, tabs, carriage returns)
+            char = self._peek()
+            if char is None:
+                break
+
+            # Spaces and tabs within a line
             if char in (" ", "\t", "\r"):
                 self._advance()
                 continue
@@ -63,15 +77,15 @@ class Lexer:
                 start_line = self.line
                 start_col = self.column
                 self._advance()
-                # Emit NEWLINE token, collapsing consecutive newlines
-                if tokens and tokens[-1].type != TokenType.NEWLINE:
-                    tokens.append(Token(TokenType.NEWLINE, "\n", start_line, start_col))
+                self.at_line_start = True
+                if self.paren_level == 0:
+                    # Emit NEWLINE if the last token isn't already a structural delimiter
+                    if tokens and tokens[-1].type not in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT):
+                        tokens.append(Token(TokenType.NEWLINE, "\n", start_line, start_col))
                 continue
 
-            # Comments: // ...
-            if char == "/" and self._peek(1) == "/":
-                self._advance()  # consume first /
-                self._advance()  # consume second /
+            # Comments: '#' (Python style) or '//'
+            if char == "#" or (char == "/" and self._peek(1) == "/"):
                 while self._peek() is not None and self._peek() != "\n":
                     self._advance()
                 continue
@@ -84,15 +98,22 @@ class Lexer:
                 tokens.append(self._lex_number(start_line, start_col))
                 continue
 
-            # Strings: "..."
-            if char == '"':
-                tokens.append(self._lex_string(start_line, start_col))
+            # Strings: "..." or '...'
+            if char in ('"', "'"):
+                tokens.append(self._lex_string(start_line, start_col, quote_char=char))
                 continue
 
             # Identifiers and keywords
             if char.isalpha() or char == "_":
                 tokens.append(self._lex_identifier(start_line, start_col))
                 continue
+
+            # Track parentheses / brackets depth
+            if char in ("(", "[", "{"):
+                self.paren_level += 1
+            elif char in (")", "]", "}"):
+                if self.paren_level > 0:
+                    self.paren_level -= 1
 
             # Two-character or single-character operators
             if char == "=":
@@ -134,6 +155,7 @@ class Lexer:
                 "*": (TokenType.STAR, "*"),
                 "/": (TokenType.SLASH, "/"),
                 "%": (TokenType.MODULO, "%"),
+                ":": (TokenType.COLON, ":"),
                 "(": (TokenType.LPAREN, "("),
                 ")": (TokenType.RPAREN, ")"),
                 "{": (TokenType.LBRACE, "{"),
@@ -142,7 +164,6 @@ class Lexer:
                 "]": (TokenType.RBRACKET, "]"),
                 ",": (TokenType.COMMA, ","),
                 ".": (TokenType.DOT, "."),
-                ":": (TokenType.COLON, ":"),
                 ";": (TokenType.SEMICOLON, ";"),
             }
 
@@ -152,7 +173,7 @@ class Lexer:
                 tokens.append(Token(token_type, value, start_line, start_col))
                 continue
 
-            # If we reach here, it is an unrecognized character
+            # Unrecognized character
             self._advance()
             raise LexerError(
                 f"Unexpected character '{char}'",
@@ -161,11 +182,78 @@ class Lexer:
                 source_code=self.source,
             )
 
-        # Remove trailing NEWLINE before EOF if present
-        if tokens and tokens[-1].type == TokenType.NEWLINE:
-            tokens.pop()
+        # End of source cleanup: emit final NEWLINE and DEDENTs
+        if self.paren_level == 0 and tokens and tokens[-1].type not in (TokenType.NEWLINE, TokenType.DEDENT):
+            tokens.append(Token(TokenType.NEWLINE, "\n", self.line, self.column))
+
+        while len(self.indent_stack) > 1:
+            self.indent_stack.pop()
+            tokens.append(Token(TokenType.DEDENT, None, self.line, self.column))
 
         tokens.append(Token(TokenType.EOF, None, self.line, self.column))
+        return tokens
+
+    def _handle_indentation(self) -> list[Token]:
+        """Compute indentation level at line start and emit INDENT/DEDENT tokens."""
+        tokens: list[Token] = []
+
+        while self.pos < self.length:
+            indent = 0
+            start_pos = self.pos
+            start_line = self.line
+            start_col = self.column
+
+            # Count leading spaces/tabs
+            while self.pos < self.length:
+                c = self.source[self.pos]
+                if c == " ":
+                    indent += 1
+                    self._advance()
+                elif c == "\t":
+                    indent += 4
+                    self._advance()
+                else:
+                    break
+
+            # Check if line is empty or comment-only
+            if self.pos < self.length:
+                c = self.source[self.pos]
+                if c == "\n":
+                    self._advance()
+                    continue
+                if c == "#" or (c == "/" and self._peek(1) == "/"):
+                    while self._peek() is not None and self._peek() != "\n":
+                        self._advance()
+                    if self._peek() == "\n":
+                        self._advance()
+                    continue
+
+            # If EOF reached during whitespace scan, exit
+            if self.pos >= self.length:
+                break
+
+            # Inside parentheses, ignore indentation changes
+            if self.paren_level > 0:
+                break
+
+            # Compare indentation against stack
+            current_indent = self.indent_stack[-1]
+            if indent > current_indent:
+                self.indent_stack.append(indent)
+                tokens.append(Token(TokenType.INDENT, indent, start_line, start_col))
+            elif indent < current_indent:
+                while self.indent_stack[-1] > indent:
+                    self.indent_stack.pop()
+                    tokens.append(Token(TokenType.DEDENT, None, start_line, start_col))
+                if self.indent_stack[-1] != indent:
+                    raise LexerError(
+                        "Unindent does not match any outer indentation level",
+                        line=start_line,
+                        column=start_col,
+                        source_code=self.source,
+                    )
+            break
+
         return tokens
 
     def _lex_number(self, start_line: int, start_col: int) -> Token:
@@ -178,16 +266,13 @@ class Lexer:
             if c.isdigit():
                 num_str += self._advance()
             elif c == "." and not has_dot:
-                # Lookahead: is the next character a digit?
-                # If so, it's a decimal number like 3.14. If not (e.g. 3.method()), dot is separate.
                 next_c = self._peek(1)
                 if next_c is not None and next_c.isdigit():
                     has_dot = True
-                    num_str += self._advance()  # consume '.'
+                    num_str += self._advance()
                 else:
                     break
             elif c == "." and has_dot:
-                # Extra dot in number, e.g. 1.2.3 -> Malformed number
                 dot_line, dot_col = self.line, self.column
                 self._advance()
                 raise LexerError(
@@ -203,9 +288,9 @@ class Lexer:
             return Token(TokenType.NUMBER, float(num_str), start_line, start_col)
         return Token(TokenType.NUMBER, int(num_str), start_line, start_col)
 
-    def _lex_string(self, start_line: int, start_col: int) -> Token:
-        """Lex double-quoted string with escape characters."""
-        self._advance()  # Consume opening '"'
+    def _lex_string(self, start_line: int, start_col: int, quote_char: str = '"') -> Token:
+        """Lex single or double-quoted string with escape characters."""
+        self._advance()  # Consume opening quote
         result = ""
 
         while True:
@@ -218,8 +303,8 @@ class Lexer:
                     source_code=self.source,
                 )
 
-            if char == '"':
-                self._advance()  # Consume closing '"'
+            if char == quote_char:
+                self._advance()  # Consume closing quote
                 break
 
             if char == "\\":
@@ -237,13 +322,13 @@ class Lexer:
                     "t": "\t",
                     "r": "\r",
                     '"': '"',
+                    "'": "'",
                     "\\": "\\",
                 }
                 if escape in escape_map:
                     result += escape_map[escape]
                     self._advance()
                 else:
-                    # Keep raw or error? In FlowLang, raise error on invalid escape
                     escape_col = self.column
                     self._advance()
                     raise LexerError(
@@ -263,13 +348,14 @@ class Lexer:
         while self._peek() is not None and (self._peek().isalnum() or self._peek() == "_"):
             name += self._advance()
 
-        # Check if it's a keyword
         if name in KEYWORDS:
             token_type = KEYWORDS[name]
             if token_type == TokenType.TRUE:
                 return Token(TokenType.TRUE, True, start_line, start_col)
             elif token_type == TokenType.FALSE:
                 return Token(TokenType.FALSE, False, start_line, start_col)
+            elif token_type == TokenType.NONE:
+                return Token(TokenType.NONE, None, start_line, start_col)
             return Token(token_type, name, start_line, start_col)
 
         return Token(TokenType.IDENTIFIER, name, start_line, start_col)

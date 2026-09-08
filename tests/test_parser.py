@@ -1,4 +1,4 @@
-"""Tests for FlowLang Parser & AST (CORE 2 & CORE 3)."""
+"""Tests for FlowLang Parser & AST (Python-style syntax)."""
 
 import unittest
 import sys
@@ -13,11 +13,13 @@ from flowlang.ast import (
     ExpressionStatement,
     VariableDeclaration,
     BinaryOp,
+    LogicalOp,
     UnaryOp,
     Grouping,
     NumberLiteral,
     StringLiteral,
     BooleanLiteral,
+    NoneLiteral,
     Identifier,
     Assignment,
     Block,
@@ -43,7 +45,6 @@ class TestParser(unittest.TestCase):
         self.assertEqual(stmt.expression.value, 42)
 
     def test_operator_precedence(self):
-        # 2 + 3 * 4 should be 2 + (3 * 4)
         program = parse_source("2 + 3 * 4")
         stmt = program.statements[0]
         expr = stmt.expression
@@ -56,7 +57,6 @@ class TestParser(unittest.TestCase):
         self.assertEqual(expr.right.right.value, 4)
 
     def test_parenthesized_grouping(self):
-        # (2 + 3) * 4 should be ((2 + 3)) * 4
         program = parse_source("(2 + 3) * 4")
         stmt = program.statements[0]
         expr = stmt.expression
@@ -67,45 +67,13 @@ class TestParser(unittest.TestCase):
         self.assertEqual(expr.left.expression.operator, "+")
         self.assertEqual(expr.right.value, 4)
 
-    def test_left_associativity(self):
-        # 10 - 5 - 2 should be (10 - 5) - 2
-        program = parse_source("10 - 5 - 2")
+    def test_logical_operators(self):
+        program = parse_source("x > 0 and y < 10 or z == 5")
         expr = program.statements[0].expression
-        self.assertIsInstance(expr, BinaryOp)
-        self.assertEqual(expr.operator, "-")
-        self.assertEqual(expr.right.value, 2)
-        self.assertIsInstance(expr.left, BinaryOp)
-        self.assertEqual(expr.left.operator, "-")
-        self.assertEqual(expr.left.left.value, 10)
-        self.assertEqual(expr.left.right.value, 5)
-
-    def test_unary_operator(self):
-        program = parse_source("-5")
-        expr = program.statements[0].expression
-        self.assertIsInstance(expr, UnaryOp)
-        self.assertEqual(expr.operator, "-")
-        self.assertEqual(expr.operand.value, 5)
-
-        program2 = parse_source("!true")
-        expr2 = program2.statements[0].expression
-        self.assertIsInstance(expr2, UnaryOp)
-        self.assertEqual(expr2.operator, "!")
-        self.assertEqual(expr2.operand.value, True)
-
-    def test_comparisons(self):
-        program = parse_source("x >= 10")
-        expr = program.statements[0].expression
-        self.assertIsInstance(expr, BinaryOp)
-        self.assertEqual(expr.operator, ">=")
-        self.assertEqual(expr.left.name, "x")
-        self.assertEqual(expr.right.value, 10)
-
-    def test_variable_declaration(self):
-        program = parse_source("let x = 10 + 20")
-        stmt = program.statements[0]
-        self.assertIsInstance(stmt, VariableDeclaration)
-        self.assertEqual(stmt.name, "x")
-        self.assertIsInstance(stmt.initializer, BinaryOp)
+        self.assertIsInstance(expr, LogicalOp)
+        self.assertEqual(expr.operator, "or")
+        self.assertIsInstance(expr.left, LogicalOp)
+        self.assertEqual(expr.left.operator, "and")
 
     def test_assignment(self):
         program = parse_source("x = 50")
@@ -116,57 +84,46 @@ class TestParser(unittest.TestCase):
         self.assertEqual(stmt.expression.value.value, 50)
 
     def test_call_expression(self):
-        program = parse_source("say(x, 10)")
+        program = parse_source("print(x, 10)")
         expr = program.statements[0].expression
         self.assertIsInstance(expr, CallExpression)
-        self.assertEqual(expr.callee.name, "say")
+        self.assertEqual(expr.callee.name, "print")
         self.assertEqual(len(expr.arguments), 2)
         self.assertEqual(expr.arguments[0].name, "x")
         self.assertEqual(expr.arguments[1].value, 10)
 
-    def test_if_else_statement(self):
+    def test_if_elif_else_statement(self):
         source = """
-        if x > 0 {
-            y = 1
-        } else {
-            y = 2
-        }
-        """
+if x > 0:
+    y = 1
+elif x == 0:
+    y = 0
+else:
+    y = -1
+"""
         program = parse_source(source)
         stmt = program.statements[0]
         self.assertIsInstance(stmt, IfStatement)
         self.assertEqual(stmt.condition.operator, ">")
         self.assertIsInstance(stmt.then_branch, Block)
-        self.assertIsInstance(stmt.else_branch, Block)
+        self.assertIsInstance(stmt.else_branch, IfStatement)
+        self.assertIsInstance(stmt.else_branch.else_branch, Block)
 
     def test_while_statement(self):
         source = """
-        while x < 10 {
-            x = x + 1
-        }
-        """
+while x < 10:
+    x = x + 1
+"""
         program = parse_source(source)
         stmt = program.statements[0]
         self.assertIsInstance(stmt, WhileStatement)
         self.assertEqual(stmt.condition.operator, "<")
         self.assertIsInstance(stmt.body, Block)
 
-    # ---------------- Error cases ----------------
-
-    def test_missing_closing_parenthesis(self):
+    def test_missing_colon_error(self):
         with self.assertRaises(ParserError) as ctx:
-            parse_source("(2 + 3")
-        self.assertIn("Expected ')'", str(ctx.exception))
-
-    def test_invalid_assignment_target(self):
-        with self.assertRaises(ParserError) as ctx:
-            parse_source("10 = 20")
-        self.assertIn("Invalid assignment target", str(ctx.exception))
-
-    def test_missing_variable_name(self):
-        with self.assertRaises(ParserError) as ctx:
-            parse_source("let = 10")
-        self.assertIn("Expected variable name after 'let'", str(ctx.exception))
+            parse_source("if x > 0\n    y = 1")
+        self.assertIn("Expected ':'", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-// FlowLang Hello World
-let greeting = "Hello, world from"
-let language = "FlowLang"
-say(greeting, language)
+# FlowLang Hello World (Python-style)
+greeting = "Hello, world from"
+language = "FlowLang"
+print(greeting, language)

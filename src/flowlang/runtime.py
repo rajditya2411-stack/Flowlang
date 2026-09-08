@@ -55,6 +55,10 @@ class Environment:
         """Define a new variable in the current local scope."""
         self.values[name] = value
 
+    def set(self, name: str, value: Any) -> None:
+        """Python-style assignment: define or update variable in the current scope."""
+        self.values[name] = value
+
     def get(self, name: str, line: int, column: int, source_code: Optional[str] = None) -> Any:
         """Retrieve variable value from current or enclosing scopes."""
         if name in self.values:
@@ -71,31 +75,33 @@ class Environment:
         )
 
     def assign(self, name: str, value: Any, line: int, column: int, source_code: Optional[str] = None) -> None:
-        """Assign to an already existing variable in current or enclosing scopes."""
+        """Assign to an existing variable in current or enclosing scope, or create locally."""
         if name in self.values:
             self.values[name] = value
             return
 
-        if self.parent is not None:
+        if self.parent is not None and self._exists_in_parent(name):
             self.parent.assign(name, value, line, column, source_code)
             return
 
-        raise FlowRuntimeError(
-            f"Cannot assign to undefined variable '{name}'",
-            line=line,
-            column=column,
-            source_code=source_code,
-        )
+        # Python semantics: assign creates or updates locally
+        self.values[name] = value
+
+    def _exists_in_parent(self, name: str) -> bool:
+        if self.parent is None:
+            return False
+        if name in self.parent.values:
+            return True
+        return self.parent._exists_in_parent(name)
 
 
 def stringify_value(value: Any) -> str:
     """Format a FlowLang runtime value into its canonical string representation."""
     if value is None:
-        return "nil"
+        return "None"
     if isinstance(value, bool):
-        return "true" if value else "false"
+        return "True" if value else "False"
     if isinstance(value, float):
-        # Clean formatting: 5.0 -> 5.0, but avoid long IEEE 754 precision artifacts if simple
         text = str(value)
         if text.endswith(".0"):
             return text

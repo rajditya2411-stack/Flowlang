@@ -1,8 +1,7 @@
 """FlowLang Abstract Syntax Tree (AST) definitions.
 
 AST nodes represent the syntactic structure of FlowLang programs.
-Nodes are purely structural data containers with line/column tracking,
-independent of interpreter execution logic.
+Nodes are purely structural data containers with line/column tracking.
 """
 
 from dataclasses import dataclass
@@ -49,6 +48,12 @@ class BooleanLiteral(Expression):
 
 
 @dataclass
+class NoneLiteral(Expression):
+    def __repr__(self) -> str:
+        return "None"
+
+
+@dataclass
 class Identifier(Expression):
     name: str
 
@@ -67,12 +72,22 @@ class BinaryOp(Expression):
 
 
 @dataclass
+class LogicalOp(Expression):
+    left: Expression
+    operator: str  # "and" | "or"
+    right: Expression
+
+    def __repr__(self) -> str:
+        return f"Logical({self.left} {self.operator} {self.right})"
+
+
+@dataclass
 class UnaryOp(Expression):
     operator: str
     operand: Expression
 
     def __repr__(self) -> str:
-        return f"Unary({self.operator}{self.operand})"
+        return f"Unary({self.operator} {self.operand})"
 
 
 @dataclass
@@ -124,7 +139,7 @@ class VariableDeclaration(Statement):
     initializer: Expression
 
     def __repr__(self) -> str:
-        return f"Let({self.name} = {self.initializer})"
+        return f"VarDecl({self.name} = {self.initializer})"
 
 
 @dataclass

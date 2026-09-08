@@ -1,7 +1,7 @@
 """FlowLang Tree-Walk Interpreter.
 
 Walks the Abstract Syntax Tree (AST), executing statements and evaluating expressions.
-Maintains runtime state within scoped environments.
+Supports Python-like truthiness, short-circuit logical operators, and built-in print.
 """
 
 from typing import Any, Callable, Optional
@@ -17,12 +17,14 @@ from flowlang.ast import (
     WhileStatement,
     Assignment,
     BinaryOp,
+    LogicalOp,
     UnaryOp,
     Grouping,
     CallExpression,
     NumberLiteral,
     StringLiteral,
     BooleanLiteral,
+    NoneLiteral,
     Identifier,
 )
 from flowlang.runtime import Environment, FlowCallable, BuiltinFunction, stringify_value
@@ -46,12 +48,14 @@ class Interpreter:
 
     def _init_builtins(self) -> None:
         """Register built-in functions in the global environment."""
-        def builtin_say(interpreter: Any, args: list[Any], line: int, col: int) -> None:
+        def builtin_print(interpreter: Any, args: list[Any], line: int, col: int) -> None:
             text = " ".join(stringify_value(arg) for arg in args)
             self.output_handler(text)
             return None
 
-        self.globals.define("say", BuiltinFunction("say", builtin_say, expected_arity=None))
+        # Register both 'print' (Python style) and 'say'
+        self.globals.define("print", BuiltinFunction("print", builtin_print, expected_arity=None))
+        self.globals.define("say", BuiltinFunction("say", builtin_print, expected_arity=None))
 
     # ------------------ Execution Entry Points ------------------
 
@@ -69,7 +73,7 @@ class Interpreter:
 
         if isinstance(stmt, VariableDeclaration):
             value = self.evaluate(stmt.initializer)
-            self.environment.define(stmt.name, value)
+            self.environment.set(stmt.name, value)
             return None
 
         if isinstance(stmt, Block):
@@ -121,6 +125,9 @@ class Interpreter:
         if isinstance(expr, BooleanLiteral):
             return expr.value
 
+        if isinstance(expr, NoneLiteral):
+            return None
+
         if isinstance(expr, Identifier):
             return self.environment.get(expr.name, expr.line, expr.column, self.source_code)
 
@@ -132,6 +139,9 @@ class Interpreter:
 
         if isinstance(expr, BinaryOp):
             return self._evaluate_binary(expr)
+
+        if isinstance(expr, LogicalOp):
+            return self._evaluate_logical(expr)
 
         if isinstance(expr, Assignment):
             value = self.evaluate(expr.value)
@@ -161,11 +171,32 @@ class Interpreter:
                 )
             return -operand
 
-        if expr.operator == "!":
+        if expr.operator in ("!", "not"):
             return not self._is_truthy(operand)
 
         raise FlowRuntimeError(
             f"Unknown unary operator '{expr.operator}'",
+            line=expr.line,
+            column=expr.column,
+            source_code=self.source_code,
+        )
+
+    def _evaluate_logical(self, expr: LogicalOp) -> Any:
+        """Evaluate short-circuiting logical AND / OR operators."""
+        left = self.evaluate(expr.left)
+
+        if expr.operator == "or":
+            if self._is_truthy(left):
+                return left
+            return self.evaluate(expr.right)
+
+        if expr.operator == "and":
+            if not self._is_truthy(left):
+                return left
+            return self.evaluate(expr.right)
+
+        raise FlowRuntimeError(
+            f"Unknown logical operator '{expr.operator}'",
             line=expr.line,
             column=expr.column,
             source_code=self.source_code,
@@ -178,11 +209,9 @@ class Interpreter:
 
         # Arithmetic operators
         if op == "+":
-            # Both numbers: addition
             if isinstance(left, (int, float)) and not isinstance(left, bool) and \
                isinstance(right, (int, float)) and not isinstance(right, bool):
                 return left + right
-            # Both strings: string concatenation
             if isinstance(left, str) and isinstance(right, str):
                 return left + right
             raise FlowRuntimeError(
@@ -206,7 +235,6 @@ class Interpreter:
                         column=expr.column,
                         source_code=self.source_code,
                     )
-                # If both are ints and divide evenly, return int, else float
                 res = left / right
                 return int(res) if res.is_integer() and isinstance(left, int) and isinstance(right, int) else res
             if op == "%":
@@ -263,15 +291,18 @@ class Interpreter:
     # ------------------ Runtime Helpers ------------------
 
     def _is_truthy(self, value: Any) -> bool:
-        """FlowLang truthiness: False and None are falsey; everything else is truthy."""
+        """Python-style truthiness: False, None, 0, and empty string are falsey."""
         if value is None:
             return False
         if isinstance(value, bool):
             return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            return len(value) > 0
         return True
 
     def _check_number_operands(self, operator: str, left: Any, right: Any, line: int, column: int) -> None:
-        """Validate that both operands are numbers."""
         left_is_num = isinstance(left, (int, float)) and not isinstance(left, bool)
         right_is_num = isinstance(right, (int, float)) and not isinstance(right, bool)
         if not (left_is_num and right_is_num):
@@ -284,9 +315,8 @@ class Interpreter:
 
     @staticmethod
     def _type_name(val: Any) -> str:
-        """Friendly type name for FlowLang values."""
         if val is None:
-            return "nil"
+            return "None"
         if isinstance(val, bool):
             return "bool"
         if isinstance(val, int):
@@ -294,5 +324,5 @@ class Interpreter:
         if isinstance(val, float):
             return "float"
         if isinstance(val, str):
-            return "string"
+            return "str"
         return type(val).__name__

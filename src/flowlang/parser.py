@@ -1,7 +1,7 @@
-"""FlowLang Recursive-Descent Parser.
+"""FlowLang Recursive-Descent Parser for Python-style Syntax.
 
-Consumes a stream of tokens and constructs an Abstract Syntax Tree (AST).
-Enforces correct operator precedence and provides rich syntax error messages.
+Parses indentation suites (: + INDENT ... DEDENT), if/elif/else, while,
+direct assignments, and Python logical expressions into AST nodes.
 """
 
 from typing import Optional, List
@@ -18,18 +18,20 @@ from flowlang.ast import (
     WhileStatement,
     Assignment,
     BinaryOp,
+    LogicalOp,
     UnaryOp,
     Grouping,
     CallExpression,
     NumberLiteral,
     StringLiteral,
     BooleanLiteral,
+    NoneLiteral,
     Identifier,
 )
 
 
 class Parser:
-    """Recursive-descent parser for FlowLang."""
+    """Recursive-descent parser for Python-like FlowLang."""
 
     def __init__(self, tokens: list[Token], source_code: Optional[str] = None):
         self.tokens = tokens
@@ -39,31 +41,25 @@ class Parser:
     # ------------------ Token Navigation Helpers ------------------
 
     def _peek(self) -> Token:
-        """Return the current token without consuming it."""
         return self.tokens[self.pos]
 
     def _previous(self) -> Token:
-        """Return the most recently consumed token."""
         return self.tokens[self.pos - 1]
 
     def _is_at_end(self) -> bool:
-        """Check if we have reached the end of the token stream."""
         return self._peek().type == TokenType.EOF
 
     def _advance(self) -> Token:
-        """Consume and return the current token."""
         if not self._is_at_end():
             self.pos += 1
         return self._previous()
 
     def _check(self, token_type: TokenType) -> bool:
-        """Check if the current token matches token_type without consuming."""
         if self._is_at_end():
             return token_type == TokenType.EOF
         return self._peek().type == token_type
 
     def _match(self, *token_types: TokenType) -> bool:
-        """Consume current token if it matches any of token_types."""
         for t in token_types:
             if self._check(t):
                 self._advance()
@@ -71,7 +67,6 @@ class Parser:
         return False
 
     def _consume(self, token_type: TokenType, error_message: str) -> Token:
-        """Consume expected token or raise a ParserError."""
         if self._check(token_type):
             return self._advance()
         current = self._peek()
@@ -83,7 +78,6 @@ class Parser:
         )
 
     def _skip_newlines(self) -> None:
-        """Skip any consecutive newlines."""
         while self._match(TokenType.NEWLINE):
             pass
 
@@ -110,11 +104,8 @@ class Parser:
     # ------------------ Statement Parsing ------------------
 
     def _statement(self) -> Statement:
-        """statement -> var_declaration | if_statement | while_statement | block | expr_statement"""
+        """statement -> if_statement | while_statement | let_statement | expr_statement"""
         self._skip_newlines()
-
-        if self._match(TokenType.LET):
-            return self._var_declaration()
 
         if self._match(TokenType.IF):
             return self._if_statement()
@@ -122,84 +113,90 @@ class Parser:
         if self._match(TokenType.WHILE):
             return self._while_statement()
 
-        if self._check(TokenType.LBRACE):
-            return self._block()
+        if self._match(TokenType.LET):
+            return self._let_statement()
 
         return self._expression_statement()
 
-    def _var_declaration(self) -> VariableDeclaration:
-        """var_declaration -> 'let' IDENTIFIER '=' expression"""
-        let_token = self._previous()
-        name_token = self._consume(TokenType.IDENTIFIER, "Expected variable name after 'let'")
-        self._consume(TokenType.ASSIGN, f"Expected '=' after variable name '{name_token.value}'")
-        initializer = self._expression()
+    def _suite(self) -> Statement:
+        """suite -> ':' ( NEWLINE INDENT statement+ DEDENT | statement )"""
+        self._consume(TokenType.COLON, "Expected ':' after condition")
 
-        # Optional semicolon or newline statement terminator
-        self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
+        # Indented multi-line block
+        if self._match(TokenType.NEWLINE):
+            indent_tok = self._consume(TokenType.INDENT, "Expected indented block")
+            statements: list[Statement] = []
 
-        return VariableDeclaration(
-            line=let_token.line,
-            column=let_token.column,
-            name=name_token.value,
-            initializer=initializer,
+            self._skip_newlines()
+            while not self._check(TokenType.DEDENT) and not self._is_at_end():
+                stmt = self._statement()
+                if stmt is not None:
+                    statements.append(stmt)
+                self._skip_newlines()
+
+            self._consume(TokenType.DEDENT, "Expected dedent at end of block")
+            return Block(
+                line=indent_tok.line,
+                column=indent_tok.column,
+                statements=statements,
+            )
+
+        # Single-line suite on same line: `if condition: statement`
+        stmt = self._statement()
+        return Block(
+            line=stmt.line,
+            column=stmt.column,
+            statements=[stmt],
         )
 
     def _if_statement(self) -> IfStatement:
-        """if_statement -> 'if' expression block ( 'else' ( block | if_statement ) )?"""
-        if_token = self._previous()
+        """if_statement -> 'if' expression suite ('elif' expression suite)* ('else' suite)?"""
+        if_tok = self._previous()
         condition = self._expression()
-
-        self._skip_newlines()
-        then_branch = self._block()
+        then_branch = self._suite()
 
         else_branch: Optional[Statement] = None
         self._skip_newlines()
-        if self._match(TokenType.ELSE):
-            self._skip_newlines()
-            if self._match(TokenType.IF):
-                else_branch = self._if_statement()
-            else:
-                else_branch = self._block()
+
+        if self._match(TokenType.ELIF):
+            else_branch = self._if_statement()
+        elif self._match(TokenType.ELSE):
+            else_branch = self._suite()
 
         return IfStatement(
-            line=if_token.line,
-            column=if_token.column,
+            line=if_tok.line,
+            column=if_tok.column,
             condition=condition,
             then_branch=then_branch,
             else_branch=else_branch,
         )
 
     def _while_statement(self) -> WhileStatement:
-        """while_statement -> 'while' expression block"""
-        while_token = self._previous()
+        """while_statement -> 'while' expression suite"""
+        while_tok = self._previous()
         condition = self._expression()
-        self._skip_newlines()
-        body = self._block()
+        body = self._suite()
 
         return WhileStatement(
-            line=while_token.line,
-            column=while_token.column,
+            line=while_tok.line,
+            column=while_tok.column,
             condition=condition,
             body=body,
         )
 
-    def _block(self) -> Block:
-        """block -> '{' statement* '}'"""
-        brace_token = self._consume(TokenType.LBRACE, "Expected '{' to begin block")
-        statements: list[Statement] = []
+    def _let_statement(self) -> VariableDeclaration:
+        """let_statement -> 'let' IDENTIFIER '=' expression (optional)"""
+        let_tok = self._previous()
+        name_tok = self._consume(TokenType.IDENTIFIER, "Expected variable name after 'let'")
+        self._consume(TokenType.ASSIGN, f"Expected '=' after variable name '{name_tok.value}'")
+        initializer = self._expression()
+        self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
 
-        self._skip_newlines()
-        while not self._check(TokenType.RBRACE) and not self._is_at_end():
-            stmt = self._statement()
-            if stmt is not None:
-                statements.append(stmt)
-            self._skip_newlines()
-
-        self._consume(TokenType.RBRACE, "Expected '}' after block")
-        return Block(
-            line=brace_token.line,
-            column=brace_token.column,
-            statements=statements,
+        return VariableDeclaration(
+            line=let_tok.line,
+            column=let_tok.column,
+            name=name_tok.value,
+            initializer=initializer,
         )
 
     def _expression_statement(self) -> ExpressionStatement:
@@ -219,8 +216,8 @@ class Parser:
         return self._assignment()
 
     def _assignment(self) -> Expression:
-        """assignment -> IDENTIFIER '=' assignment | equality"""
-        expr = self._equality()
+        """assignment -> IDENTIFIER '=' assignment | logical_or"""
+        expr = self._logical_or()
 
         if self._match(TokenType.ASSIGN):
             equals = self._previous()
@@ -242,6 +239,54 @@ class Parser:
             )
 
         return expr
+
+    def _logical_or(self) -> Expression:
+        """logical_or -> logical_and ( 'or' logical_and )*"""
+        expr = self._logical_and()
+
+        while self._match(TokenType.OR):
+            op = self._previous().value
+            right = self._logical_and()
+            expr = LogicalOp(
+                line=expr.line,
+                column=expr.column,
+                left=expr,
+                operator=op,
+                right=right,
+            )
+
+        return expr
+
+    def _logical_and(self) -> Expression:
+        """logical_and -> logical_not ( 'and' logical_not )*"""
+        expr = self._logical_not()
+
+        while self._match(TokenType.AND):
+            op = self._previous().value
+            right = self._logical_not()
+            expr = LogicalOp(
+                line=expr.line,
+                column=expr.column,
+                left=expr,
+                operator=op,
+                right=right,
+            )
+
+        return expr
+
+    def _logical_not(self) -> Expression:
+        """logical_not -> 'not' logical_not | equality"""
+        if self._match(TokenType.NOT):
+            op_tok = self._previous()
+            operand = self._logical_not()
+            return UnaryOp(
+                line=op_tok.line,
+                column=op_tok.column,
+                operator="not",
+                operand=operand,
+            )
+
+        return self._equality()
 
     def _equality(self) -> Expression:
         """equality -> comparison ( ( '==' | '!=' ) comparison )*"""
@@ -359,7 +404,7 @@ class Parser:
         )
 
     def _primary(self) -> Expression:
-        """primary -> NUMBER | STRING | TRUE | FALSE | IDENTIFIER | '(' expression ')'"""
+        """primary -> NUMBER | STRING | TRUE | FALSE | NONE | IDENTIFIER | '(' expression ')'"""
         if self._match(TokenType.NUMBER):
             tok = self._previous()
             return NumberLiteral(line=tok.line, column=tok.column, value=tok.value)
@@ -371,6 +416,10 @@ class Parser:
         if self._match(TokenType.TRUE, TokenType.FALSE):
             tok = self._previous()
             return BooleanLiteral(line=tok.line, column=tok.column, value=tok.value)
+
+        if self._match(TokenType.NONE):
+            tok = self._previous()
+            return NoneLiteral(line=tok.line, column=tok.column)
 
         if self._match(TokenType.IDENTIFIER):
             tok = self._previous()
