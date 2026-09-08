@@ -1,9 +1,11 @@
-"""FlowLang CLI & Interactive REPL.
+"""FlowLang CLI, REPL & Playground Launcher.
 
-Entry point for running FlowLang source files or launching an interactive session.
+Entry point for running FlowLang source files, launching an interactive REPL,
+or starting the browser-based FlowLang Playground.
 Usage:
   python main.py run <path_to_file.flow>
   python main.py repl
+  python main.py playground [--port 8000] [--no-browser]
 """
 
 import sys
@@ -14,6 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src"
 
 from flowlang.engine import execute
 from flowlang.runtime import Environment, stringify_value
+from flowlang.server import run_server
 from flowlang import __version__
 
 
@@ -47,7 +50,6 @@ def run_repl() -> None:
     print(f"FlowLang REPL (v{__version__})")
     print("Type 'exit' or press Ctrl+C to exit.\n")
 
-    # Persistent global environment across REPL commands
     repl_env = Environment()
 
     while True:
@@ -75,12 +77,30 @@ def run_repl() -> None:
             print(stringify_value(res.value))
 
 
+def start_playground(args: list[str]) -> None:
+    """Start local browser playground server."""
+    port = 8000
+    open_browser = True
+
+    for i, arg in enumerate(args):
+        if arg in ("--port", "-p") and i + 1 < len(args):
+            try:
+                port = int(args[i + 1])
+            except ValueError:
+                print(f"Warning: Invalid port '{args[i+1]}', using default 8000.")
+        elif arg == "--no-browser":
+            open_browser = False
+
+    run_server(port=port, open_browser=open_browser)
+
+
 def print_usage() -> None:
     print(f"FlowLang v{__version__}")
     print("Usage:")
-    print("  python main.py run <filename.flow>   Run a FlowLang program file")
-    print("  python main.py repl                  Start an interactive REPL session")
-    print("  python main.py <filename.flow>       Shorthand to run a file")
+    print("  python main.py run <filename.flow>       Run a FlowLang program file")
+    print("  python main.py repl                      Start an interactive REPL session")
+    print("  python main.py playground [--port 8000]  Start browser-based Playground UI")
+    print("  python main.py <filename.flow>           Shorthand to run a file")
 
 
 def main() -> int:
@@ -92,6 +112,9 @@ def main() -> int:
 
     if command == "repl":
         run_repl()
+        return 0
+    elif command in ("playground", "ui", "web"):
+        start_playground(sys.argv[2:])
         return 0
     elif command == "run":
         if len(sys.argv) < 3:

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowLang Playground</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navbar -->
+    <header class="navbar">
+      <div class="brand">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">FlowLang</span>
+        <span class="version-badge">v0.1.0 Core</span>
+      </div>
+
+      <div class="nav-controls">
+        <div class="example-picker-wrapper">
+          <label for="example-select">Examples:</label>
+          <select id="example-select" class="dropdown">
+            <option value="calculator">1. Calculator & Variables (a=4, b=4)</option>
+            <option value="hello">2. Hello World & Strings</option>
+            <option value="arithmetic">3. Arithmetic & Precedence</option>
+            <option value="conditionals">4. If / Elif / Else</option>
+            <option value="while_loop">5. While Loop Counter</option>
+            <option value="logic">6. Logical Operators (and/or/not)</option>
+            <option value="error_demo">7. Error Pointer Demo</option>
+          </select>
+        </div>
+
+        <button id="clear-btn" class="btn btn-secondary" title="Clear editor content">Clear</button>
+        <button id="run-btn" class="btn btn-primary" title="Execute program (Ctrl + Enter)">
+          <span class="run-icon">▶</span> Run
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="workspace">
+      <!-- Left Panel: Code Editor -->
+      <section class="panel editor-panel">
+        <div class="panel-header">
+          <span class="panel-title">Code Editor</span>
+          <span class="panel-hint">Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to run</span>
+        </div>
+        <div class="editor-container">
+          <div id="line-numbers" class="line-numbers">1</div>
+          <textarea 
+            id="code-editor" 
+            class="code-textarea" 
+            spellcheck="false" 
+            autocapitalize="off" 
+            autocomplete="off"
+            placeholder="# Write your FlowLang code here..."></textarea>
+        </div>
+      </section>
+
+      <!-- Right Panel: Output & Results -->
+      <section class="panel output-panel">
+        <div class="panel-header">
+          <span class="panel-title">Output Console</span>
+          <span id="exec-status" class="status-badge status-ready">Ready</span>
+        </div>
+
+        <div class="output-container">
+          <!-- Main Output Display -->
+          <div id="console-output" class="console-output empty-state">
+            Click <strong>Run</strong> or press <strong>Ctrl + Enter</strong> to execute your code.
+          </div>
+
+          <!-- Quick Cheat Sheet -->
+          <div class="cheatsheet">
+            <div class="cheatsheet-title">💡 FlowLang Quick Reference:</div>
+            <div class="cheatsheet-grid">
+              <div><code>a = 4</code> <span class="dim">Variable</span></div>
+              <div><code>print(a + b)</code> <span class="dim">Print</span></div>
+              <div><code>if a > b:</code> <span class="dim">Condition</span></div>
+              <div><code>while count < 5:</code> <span class="dim">Loop</span></div>
+              <div><code>True, False, None</code> <span class="dim">Literals</span></div>
+              <div><code>and, or, not</code> <span class="dim">Logic</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer Status Bar -->
+    <footer class="status-bar">
+      <div class="status-left">
+        <span class="dot online"></span>
+        <span>FlowLang Engine: Connected</span>
+      </div>
+      <div class="status-right">
+        <span id="cursor-pos">Line 1, Col 1</span>
+        <span>Python-style Indentation (4 spaces)</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
