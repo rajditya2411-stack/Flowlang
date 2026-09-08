@@ -70,16 +70,29 @@ class PlaygroundRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, format: str, *args) -> None:
         """Quiet default logging unless needed."""
-        # Suppress verbose per-request stdout logs for cleaner CLI output
         pass
 
 
-def run_server(port: int = 8000, open_browser: bool = True) -> None:
-    """Launch the FlowLang Playground server."""
-    server_address = ("", port)
-    httpd = http.server.ThreadingHTTPServer(server_address, PlaygroundRequestHandler)
+def run_server(port: int = 8500, open_browser: bool = True) -> None:
+    """Launch the FlowLang Playground server with port fallback."""
+    ports_to_try = [port, 8500, 8080, 8888, 5000] if port not in (8500, 8080, 8888, 5000) else [port, 8080, 8888, 5000]
+    httpd = None
+    active_port = port
 
-    url = f"http://localhost:{port}"
+    for p in ports_to_try:
+        try:
+            server_address = ("", p)
+            httpd = http.server.ThreadingHTTPServer(server_address, PlaygroundRequestHandler)
+            active_port = p
+            break
+        except Exception:
+            continue
+
+    if httpd is None:
+        print("Error: Could not bind Playground server to any available port.", file=sys.stderr)
+        sys.exit(1)
+
+    url = f"http://localhost:{active_port}"
     print("=" * 60)
     print("  FLOWLANG PLAYGROUND")
     print(f"  Server running at: {url}")
