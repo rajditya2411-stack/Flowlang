@@ -1,0 +1,13 @@
+# FlowLang For Loops & Range
+print("--- Loop 1: range(5) ---")
+for i in range(5):
+    print("Step:", i)
+
+print("\n--- Loop 2: Countdown with step ---")
+for count in range(5, 0, -1):
+    print("Countdown:", count)
+print("Blast off!")
+
+print("\n--- Loop 3: String characters ---")
+for letter in "FlowLang":
+    print("Letter:", letter)

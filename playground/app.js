@@ -41,16 +41,26 @@ else:
 
 print("Score:", score, "-> Grade:", grade)`,
 
-  while_loop: `# While Loop Counter
-count = 0
-total = 0
+  while_loop: `# While Loop Counter & Countdown
+i = 5
+while i > 0:
+    print("Countdown:", i)
+    i -= 1
 
-while count < 5:
-    count = count + 1
-    total = total + count
-    print("Step", count, "Total so far:", total)
+print("Blast off!")`,
 
-print("Final total:", total)`,
+  for_loop: `# For Loop with range() and sequences
+print("--- Counting up with range(5) ---")
+for i in range(5):
+    print("Step:", i)
+
+print("\\n--- Counting down with range(5, 0, -1) ---")
+for count in range(5, 0, -1):
+    print("Launch in:", count)
+
+print("\\n--- Iterating over text ---")
+for char in "FlowLang":
+    print("Letter:", char)`,
 
   logic: `# Logical Operators (and / or / not)
 x = 10

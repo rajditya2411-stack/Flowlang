@@ -1,7 +1,7 @@
 """FlowLang Token Definitions.
 
 Defines all token types and the Token representation with source location tracking.
-Supports Python-like syntax including INDENT, DEDENT, colons, and logical keywords.
+Supports Python-like syntax including INDENT, DEDENT, colons, loops, and operators.
 """
 
 from enum import Enum, auto
@@ -26,6 +26,7 @@ class TokenType(Enum):
     ELSE = auto()
     WHILE = auto()
     FOR = auto()
+    IN = auto()
     DEF = auto()
     RETURN = auto()
     LET = auto()            # Optional backwards-compatibility
@@ -35,13 +36,19 @@ class TokenType(Enum):
     OR = auto()
     NOT = auto()
 
-    # Arithmetic & Comparison Operators
+    # Arithmetic & Assignment Operators
     PLUS = auto()           # +
     MINUS = auto()          # -
     STAR = auto()           # *
     SLASH = auto()          # /
     MODULO = auto()         # %
     ASSIGN = auto()         # =
+    PLUS_ASSIGN = auto()    # +=
+    MINUS_ASSIGN = auto()   # -=
+    STAR_ASSIGN = auto()    # *=
+    SLASH_ASSIGN = auto()   # /=
+
+    # Comparison Operators
     EQUAL = auto()          # ==
     NOT_EQUAL = auto()      # !=
     LESS = auto()           # <
@@ -69,9 +76,8 @@ class TokenType(Enum):
     EOF = auto()
 
 
-# Keyword lookup table (Python-style keywords + ergonomic fallbacks)
+# Keyword lookup table
 KEYWORDS: dict[str, TokenType] = {
-    # Python style
     "True": TokenType.TRUE,
     "False": TokenType.FALSE,
     "None": TokenType.NONE,
@@ -80,6 +86,7 @@ KEYWORDS: dict[str, TokenType] = {
     "else": TokenType.ELSE,
     "while": TokenType.WHILE,
     "for": TokenType.FOR,
+    "in": TokenType.IN,
     "def": TokenType.DEF,
     "return": TokenType.RETURN,
     "and": TokenType.AND,

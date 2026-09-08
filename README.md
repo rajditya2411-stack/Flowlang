@@ -1,10 +1,12 @@
-# FlowLang — Language Core
+# FlowLang — Language Core & Playground
 
 FlowLang is a clean, hand-crafted interpreted programming language built from scratch in Python with zero external compiler dependencies.
 
-FlowLang features **Python-style syntax** (colons `:`, indentation-based blocks, direct assignments, `True`/`False`/`None`, `and`/`or`/`not`, `#` comments, and `print`).
+FlowLang features **Python-style syntax** (colons `:`, indentation-based blocks, direct assignments, augmented assignments `+=`/`-=`/`*=`, `if`/`elif`/`else`, `while`, `for ... in ...`, `range`, `print`, `True`/`False`/`None`, `and`/`or`/`not`, and `#` comments).
 
-The language engine follows an explicit multi-stage architecture:
+---
+
+## Language Core Architecture
 ```
 FlowLang source code
         ↓
@@ -16,112 +18,95 @@ FlowLang source code
         ↓
    Interpreter (Tree-walk evaluator)
         ↓
-      Runtime (Lexical scopes & builtins)
+      Runtime (Lexical scopes, range, builtins)
         ↓
    Output / Structured Errors
 ```
 
 ---
 
-## Project Structure
+## Language Features (Current Scope)
 
+### 1. Variables & Assignments
+```python
+a = 4
+b = 4
+print("a + b =", a + b)  # 8
+
+# Augmented assignments
+a += 10
+b -= 2
 ```
-flowlang/
-├── src/
-│   └── flowlang/
-│       ├── __init__.py      # Package metadata & version
-│       ├── tokens.py        # Token types (INDENT, DEDENT, etc.) and Token class
-│       ├── lexer.py         # Lexical analyzer with Python indentation tracking
-│       ├── ast.py           # Abstract Syntax Tree node definitions
-│       ├── parser.py        # Recursive-descent parser with suites & operator precedence
-│       ├── runtime.py       # Scopes (Environment), builtins (print/say), stringifier
-│       ├── interpreter.py   # Tree-walk AST evaluator (short-circuit logic, math, control flow)
-│       ├── errors.py        # Structured error types with line/column pointers
-│       └── engine.py        # Clean pipeline facade (for CLI, REPL, & Playground API)
-│
-├── tests/
-│   ├── test_lexer.py        # Lexer tests (indentation, tokens, escapes, malformed input)
-│   ├── test_parser.py       # Parser & AST tests (suites, precedence, grouping, expressions)
-│   ├── test_interpreter.py  # Evaluation tests (arithmetic, variables, if/elif/else, while)
-│   ├── test_errors.py       # Error formatting and source pointer tests
-│   └── test_engine.py       # End-to-end pipeline execution tests
-│
-├── examples/
-│   ├── hello.flow           # Hello World example
-│   ├── arithmetic.flow      # Arithmetic precedence and conditionals
-│   └── error_example.flow   # Example showing formatted error output
-│
-├── main.py                  # CLI & REPL entry point
-├── requirements.txt         # Project requirements (Standard Library)
-└── README.md
+
+### 2. Loops
+
+**While Loops:**
+```python
+i = 5
+while i > 0:
+    print("Countdown:", i)
+    i -= 1
 ```
+
+**For Loops with `range()`:**
+```python
+# Counting up
+for i in range(5):
+    print("Step:", i)
+
+# Counting down
+for count in range(5, 0, -1):
+    print(count)
+
+# Iterating over text
+for letter in "FlowLang":
+    print(letter)
+```
+
+### 3. Conditionals (`if`, `elif`, `else`)
+```python
+score = 85
+if score >= 90:
+    print("Grade: A")
+elif score >= 80:
+    print("Grade: B")
+else:
+    print("Grade: C")
+```
+
+### 4. Built-in Functions
+- `print(*args)` / `say(*args)`
+- `range(stop)` / `range(start, stop)` / `range(start, stop, step)`
+- `len(obj)`
+- `abs(x)`
+- `type(x)`
+- `int(x)`, `float(x)`, `str(x)`, `bool(x)`
 
 ---
 
 ## Quick Start
 
-### 1. Run an Example File
+### 1. Launch Browser Playground
 ```bash
-python main.py run examples/hello.flow
+python main.py playground
 ```
+Opens the interactive web UI at **`http://localhost:8500`**.
 
-Output:
-```
-Hello, world from FlowLang
-```
-
+### 2. Run a FlowLang File
 ```bash
-python main.py run examples/arithmetic.flow
+python main.py run examples/for_loop.flow
 ```
 
-Output:
-```
-Result is: 55
-Result is greater than 50!
-```
-
-### 2. Interactive REPL
-Launch the FlowLang REPL:
+### 3. Interactive REPL
 ```bash
 python main.py repl
-```
-
-Example session:
-```
-FlowLang REPL (v0.1.0)
-Type 'exit' or press Ctrl+C to exit.
-
-flow> a = 4
-flow> b = 4
-flow> a + b
-8
-flow> if a == b:
-...       print("Equal!")
-Equal!
-flow> exit
-Goodbye!
-```
-
----
-
-## Error Handling
-
-FlowLang does not expose raw Python stack traces. Errors include line numbers, column positions, and visual caret pointers:
-
-```
-FlowLang RuntimeError: Undefined variable 'invalid_var'
-  at line 4, column 7
-
-  4 | print(invalid_var)
-            ^
 ```
 
 ---
 
 ## Running Tests
 
-All 43 tests run using Python's built-in `unittest`:
-
+Run all 56 tests using Python's built-in `unittest`:
 ```bash
 python -m unittest discover tests -v
 ```

@@ -24,14 +24,12 @@ class Lexer:
         self.at_line_start = True
 
     def _peek(self, offset: int = 0) -> Optional[str]:
-        """Look ahead without consuming."""
         target = self.pos + offset
         if target < self.length:
             return self.source[target]
         return None
 
     def _advance(self) -> Optional[str]:
-        """Consume and return the current character, updating line and column."""
         if self.pos >= self.length:
             return None
         char = self.source[self.pos]
@@ -44,18 +42,15 @@ class Lexer:
         return char
 
     def _match(self, expected: str) -> bool:
-        """Consume next character only if it matches expected."""
         if self.pos >= self.length or self.source[self.pos] != expected:
             return False
         self._advance()
         return True
 
     def tokenize(self) -> list[Token]:
-        """Tokenize the entire source string into a list of Tokens ending with EOF."""
         tokens: list[Token] = []
 
         while self.pos < self.length:
-            # Handle start-of-line indentation when not inside parentheses/brackets
             if self.at_line_start:
                 self.at_line_start = False
                 indent_tokens = self._handle_indentation()
@@ -79,7 +74,6 @@ class Lexer:
                 self._advance()
                 self.at_line_start = True
                 if self.paren_level == 0:
-                    # Emit NEWLINE if the last token isn't already a structural delimiter
                     if tokens and tokens[-1].type not in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT):
                         tokens.append(Token(TokenType.NEWLINE, "\n", start_line, start_col))
                 continue
@@ -116,6 +110,38 @@ class Lexer:
                     self.paren_level -= 1
 
             # Two-character or single-character operators
+            if char == "+":
+                self._advance()
+                if self._match("="):
+                    tokens.append(Token(TokenType.PLUS_ASSIGN, "+=", start_line, start_col))
+                else:
+                    tokens.append(Token(TokenType.PLUS, "+", start_line, start_col))
+                continue
+
+            if char == "-":
+                self._advance()
+                if self._match("="):
+                    tokens.append(Token(TokenType.MINUS_ASSIGN, "-=", start_line, start_col))
+                else:
+                    tokens.append(Token(TokenType.MINUS, "-", start_line, start_col))
+                continue
+
+            if char == "*":
+                self._advance()
+                if self._match("="):
+                    tokens.append(Token(TokenType.STAR_ASSIGN, "*=", start_line, start_col))
+                else:
+                    tokens.append(Token(TokenType.STAR, "*", start_line, start_col))
+                continue
+
+            if char == "/":
+                self._advance()
+                if self._match("="):
+                    tokens.append(Token(TokenType.SLASH_ASSIGN, "/=", start_line, start_col))
+                else:
+                    tokens.append(Token(TokenType.SLASH, "/", start_line, start_col))
+                continue
+
             if char == "=":
                 self._advance()
                 if self._match("="):
@@ -150,10 +176,6 @@ class Lexer:
 
             # Single-character operators and punctuation
             simple_tokens = {
-                "+": (TokenType.PLUS, "+"),
-                "-": (TokenType.MINUS, "-"),
-                "*": (TokenType.STAR, "*"),
-                "/": (TokenType.SLASH, "/"),
                 "%": (TokenType.MODULO, "%"),
                 ":": (TokenType.COLON, ":"),
                 "(": (TokenType.LPAREN, "("),
@@ -194,16 +216,13 @@ class Lexer:
         return tokens
 
     def _handle_indentation(self) -> list[Token]:
-        """Compute indentation level at line start and emit INDENT/DEDENT tokens."""
         tokens: list[Token] = []
 
         while self.pos < self.length:
             indent = 0
-            start_pos = self.pos
             start_line = self.line
             start_col = self.column
 
-            # Count leading spaces/tabs
             while self.pos < self.length:
                 c = self.source[self.pos]
                 if c == " ":
@@ -215,7 +234,6 @@ class Lexer:
                 else:
                     break
 
-            # Check if line is empty or comment-only
             if self.pos < self.length:
                 c = self.source[self.pos]
                 if c == "\n":
@@ -228,15 +246,12 @@ class Lexer:
                         self._advance()
                     continue
 
-            # If EOF reached during whitespace scan, exit
             if self.pos >= self.length:
                 break
 
-            # Inside parentheses, ignore indentation changes
             if self.paren_level > 0:
                 break
 
-            # Compare indentation against stack
             current_indent = self.indent_stack[-1]
             if indent > current_indent:
                 self.indent_stack.append(indent)
@@ -257,7 +272,6 @@ class Lexer:
         return tokens
 
     def _lex_number(self, start_line: int, start_col: int) -> Token:
-        """Lex integer or decimal number."""
         num_str = ""
         has_dot = False
 
@@ -289,8 +303,7 @@ class Lexer:
         return Token(TokenType.NUMBER, int(num_str), start_line, start_col)
 
     def _lex_string(self, start_line: int, start_col: int, quote_char: str = '"') -> Token:
-        """Lex single or double-quoted string with escape characters."""
-        self._advance()  # Consume opening quote
+        self._advance()
         result = ""
 
         while True:
@@ -304,11 +317,11 @@ class Lexer:
                 )
 
             if char == quote_char:
-                self._advance()  # Consume closing quote
+                self._advance()
                 break
 
             if char == "\\":
-                self._advance()  # Consume '\'
+                self._advance()
                 escape = self._peek()
                 if escape is None:
                     raise LexerError(
@@ -343,7 +356,6 @@ class Lexer:
         return Token(TokenType.STRING, result, start_line, start_col)
 
     def _lex_identifier(self, start_line: int, start_col: int) -> Token:
-        """Lex identifier or keyword."""
         name = ""
         while self._peek() is not None and (self._peek().isalnum() or self._peek() == "_"):
             name += self._advance()

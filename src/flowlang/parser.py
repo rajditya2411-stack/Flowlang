@@ -1,7 +1,7 @@
 """FlowLang Recursive-Descent Parser for Python-style Syntax.
 
-Parses indentation suites (: + INDENT ... DEDENT), if/elif/else, while,
-direct assignments, and Python logical expressions into AST nodes.
+Parses indentation suites (: + INDENT ... DEDENT), if/elif/else, while, for,
+direct assignments, augmented assignments (+=, -=, *=, /=), and logical expressions.
 """
 
 from typing import Optional, List
@@ -16,7 +16,9 @@ from flowlang.ast import (
     Block,
     IfStatement,
     WhileStatement,
+    ForStatement,
     Assignment,
+    AugmentedAssignment,
     BinaryOp,
     LogicalOp,
     UnaryOp,
@@ -84,7 +86,6 @@ class Parser:
     # ------------------ Public Parse Entry Point ------------------
 
     def parse(self) -> Program:
-        """Parse the complete token stream into a Program node."""
         statements: list[Statement] = []
         self._skip_newlines()
 
@@ -104,7 +105,7 @@ class Parser:
     # ------------------ Statement Parsing ------------------
 
     def _statement(self) -> Statement:
-        """statement -> if_statement | while_statement | let_statement | expr_statement"""
+        """statement -> if_statement | while_statement | for_statement | let_statement | expr_statement"""
         self._skip_newlines()
 
         if self._match(TokenType.IF):
@@ -112,6 +113,9 @@ class Parser:
 
         if self._match(TokenType.WHILE):
             return self._while_statement()
+
+        if self._match(TokenType.FOR):
+            return self._for_statement()
 
         if self._match(TokenType.LET):
             return self._let_statement()
@@ -122,7 +126,6 @@ class Parser:
         """suite -> ':' ( NEWLINE INDENT statement+ DEDENT | statement )"""
         self._consume(TokenType.COLON, "Expected ':' after condition")
 
-        # Indented multi-line block
         if self._match(TokenType.NEWLINE):
             indent_tok = self._consume(TokenType.INDENT, "Expected indented block")
             statements: list[Statement] = []
@@ -141,7 +144,6 @@ class Parser:
                 statements=statements,
             )
 
-        # Single-line suite on same line: `if condition: statement`
         stmt = self._statement()
         return Block(
             line=stmt.line,
@@ -184,6 +186,22 @@ class Parser:
             body=body,
         )
 
+    def _for_statement(self) -> ForStatement:
+        """for_statement -> 'for' IDENTIFIER 'in' expression suite"""
+        for_tok = self._previous()
+        target_tok = self._consume(TokenType.IDENTIFIER, "Expected variable name after 'for'")
+        self._consume(TokenType.IN, "Expected 'in' after for loop variable")
+        iterable = self._expression()
+        body = self._suite()
+
+        return ForStatement(
+            line=for_tok.line,
+            column=for_tok.column,
+            target=target_tok.value,
+            iterable=iterable,
+            body=body,
+        )
+
     def _let_statement(self) -> VariableDeclaration:
         """let_statement -> 'let' IDENTIFIER '=' expression (optional)"""
         let_tok = self._previous()
@@ -212,11 +230,10 @@ class Parser:
     # ------------------ Expression Parsing ------------------
 
     def _expression(self) -> Expression:
-        """expression -> assignment"""
         return self._assignment()
 
     def _assignment(self) -> Expression:
-        """assignment -> IDENTIFIER '=' assignment | logical_or"""
+        """assignment -> IDENTIFIER ('=' | '+=' | '-=' | '*=' | '/=') assignment | logical_or"""
         expr = self._logical_or()
 
         if self._match(TokenType.ASSIGN):
@@ -235,6 +252,26 @@ class Parser:
                 f"Invalid assignment target at line {equals.line}",
                 line=equals.line,
                 column=equals.column,
+                source_code=self.source_code,
+            )
+
+        if self._match(TokenType.PLUS_ASSIGN, TokenType.MINUS_ASSIGN, TokenType.STAR_ASSIGN, TokenType.SLASH_ASSIGN):
+            op_tok = self._previous()
+            value = self._assignment()
+
+            if isinstance(expr, Identifier):
+                return AugmentedAssignment(
+                    line=op_tok.line,
+                    column=op_tok.column,
+                    name=expr.name,
+                    operator=op_tok.value,
+                    value=value,
+                )
+
+            raise ParserError(
+                f"Invalid assignment target at line {op_tok.line}",
+                line=op_tok.line,
+                column=op_tok.column,
                 source_code=self.source_code,
             )
 

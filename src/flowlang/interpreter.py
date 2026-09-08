@@ -1,7 +1,8 @@
 """FlowLang Tree-Walk Interpreter.
 
 Walks the Abstract Syntax Tree (AST), executing statements and evaluating expressions.
-Supports Python-like truthiness, short-circuit logical operators, and built-in print.
+Supports Python-like truthiness, short-circuit logical operators, for/while loops,
+augmented assignments, and built-in functions (print, range, len, abs, type, int, float, str, bool).
 """
 
 from typing import Any, Callable, Optional
@@ -15,7 +16,9 @@ from flowlang.ast import (
     Block,
     IfStatement,
     WhileStatement,
+    ForStatement,
     Assignment,
+    AugmentedAssignment,
     BinaryOp,
     LogicalOp,
     UnaryOp,
@@ -48,26 +51,111 @@ class Interpreter:
 
     def _init_builtins(self) -> None:
         """Register built-in functions in the global environment."""
+
+        # print(*args) / say(*args)
         def builtin_print(interpreter: Any, args: list[Any], line: int, col: int) -> None:
             text = " ".join(stringify_value(arg) for arg in args)
             self.output_handler(text)
             return None
 
-        # Register both 'print' (Python style) and 'say'
+        # range(stop) | range(start, stop) | range(start, stop, step)
+        def builtin_range(interpreter: Any, args: list[Any], line: int, col: int) -> list[int]:
+            if not args or len(args) > 3:
+                raise FlowRuntimeError(
+                    f"range expected 1 to 3 arguments, got {len(args)}",
+                    line=line, column=col, source_code=self.source_code
+                )
+            for a in args:
+                if not isinstance(a, int) or isinstance(a, bool):
+                    raise FlowRuntimeError(
+                        f"range arguments must be integers, got {self._type_name(a)}",
+                        line=line, column=col, source_code=self.source_code
+                    )
+            if len(args) == 1:
+                return list(range(args[0]))
+            elif len(args) == 2:
+                return list(range(args[0], args[1]))
+            else:
+                if args[2] == 0:
+                    raise FlowRuntimeError("range step must not be zero", line=line, column=col, source_code=self.source_code)
+                return list(range(args[0], args[1], args[2]))
+
+        # len(obj)
+        def builtin_len(interpreter: Any, args: list[Any], line: int, col: int) -> int:
+            if len(args) != 1:
+                raise FlowRuntimeError(f"len() takes exactly one argument ({len(args)} given)", line=line, column=col, source_code=self.source_code)
+            obj = args[0]
+            if isinstance(obj, (str, list, tuple, dict)):
+                return len(obj)
+            raise FlowRuntimeError(f"object of type '{self._type_name(obj)}' has no len()", line=line, column=col, source_code=self.source_code)
+
+        # abs(x)
+        def builtin_abs(interpreter: Any, args: list[Any], line: int, col: int) -> Any:
+            if len(args) != 1:
+                raise FlowRuntimeError(f"abs() takes exactly one argument ({len(args)} given)", line=line, column=col, source_code=self.source_code)
+            val = args[0]
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                return abs(val)
+            raise FlowRuntimeError(f"bad operand type for abs(): '{self._type_name(val)}'", line=line, column=col, source_code=self.source_code)
+
+        # type(x)
+        def builtin_type(interpreter: Any, args: list[Any], line: int, col: int) -> str:
+            if len(args) != 1:
+                raise FlowRuntimeError(f"type() takes exactly one argument ({len(args)} given)", line=line, column=col, source_code=self.source_code)
+            return self._type_name(args[0])
+
+        # int(x)
+        def builtin_int(interpreter: Any, args: list[Any], line: int, col: int) -> int:
+            if len(args) != 1:
+                raise FlowRuntimeError("int() takes exactly one argument", line=line, column=col, source_code=self.source_code)
+            try:
+                if isinstance(args[0], bool):
+                    return 1 if args[0] else 0
+                return int(args[0])
+            except (ValueError, TypeError):
+                raise FlowRuntimeError(f"invalid literal for int(): {args[0]!r}", line=line, column=col, source_code=self.source_code)
+
+        # float(x)
+        def builtin_float(interpreter: Any, args: list[Any], line: int, col: int) -> float:
+            if len(args) != 1:
+                raise FlowRuntimeError("float() takes exactly one argument", line=line, column=col, source_code=self.source_code)
+            try:
+                return float(args[0])
+            except (ValueError, TypeError):
+                raise FlowRuntimeError(f"could not convert string to float: {args[0]!r}", line=line, column=col, source_code=self.source_code)
+
+        # str(x)
+        def builtin_str(interpreter: Any, args: list[Any], line: int, col: int) -> str:
+            if len(args) != 1:
+                raise FlowRuntimeError("str() takes exactly one argument", line=line, column=col, source_code=self.source_code)
+            return stringify_value(args[0])
+
+        # bool(x)
+        def builtin_bool(interpreter: Any, args: list[Any], line: int, col: int) -> bool:
+            if len(args) != 1:
+                raise FlowRuntimeError("bool() takes exactly one argument", line=line, column=col, source_code=self.source_code)
+            return self._is_truthy(args[0])
+
         self.globals.define("print", BuiltinFunction("print", builtin_print, expected_arity=None))
         self.globals.define("say", BuiltinFunction("say", builtin_print, expected_arity=None))
+        self.globals.define("range", BuiltinFunction("range", builtin_range, expected_arity=None))
+        self.globals.define("len", BuiltinFunction("len", builtin_len, expected_arity=1))
+        self.globals.define("abs", BuiltinFunction("abs", builtin_abs, expected_arity=1))
+        self.globals.define("type", BuiltinFunction("type", builtin_type, expected_arity=1))
+        self.globals.define("int", BuiltinFunction("int", builtin_int, expected_arity=1))
+        self.globals.define("float", BuiltinFunction("float", builtin_float, expected_arity=1))
+        self.globals.define("str", BuiltinFunction("str", builtin_str, expected_arity=1))
+        self.globals.define("bool", BuiltinFunction("bool", builtin_bool, expected_arity=1))
 
     # ------------------ Execution Entry Points ------------------
 
     def interpret(self, program: Program) -> Any:
-        """Execute a full Program AST and return the value of the last evaluated expression statement."""
         last_value = None
         for stmt in program.statements:
             last_value = self.execute(stmt)
         return last_value
 
     def execute(self, stmt: Statement) -> Any:
-        """Execute a single statement."""
         if isinstance(stmt, ExpressionStatement):
             return self.evaluate(stmt.expression)
 
@@ -93,6 +181,21 @@ class Interpreter:
                 last_value = self.execute(stmt.body)
             return last_value
 
+        if isinstance(stmt, ForStatement):
+            iterable = self.evaluate(stmt.iterable)
+            if not hasattr(iterable, "__iter__") or isinstance(iterable, (bool, int, float)) or iterable is None:
+                raise FlowRuntimeError(
+                    f"'{self._type_name(iterable)}' object is not iterable",
+                    line=stmt.line,
+                    column=stmt.column,
+                    source_code=self.source_code,
+                )
+            last_val = None
+            for item in iterable:
+                self.environment.set(stmt.target, item)
+                last_val = self.execute(stmt.body)
+            return last_val
+
         raise FlowRuntimeError(
             f"Unknown statement type: {type(stmt).__name__}",
             line=stmt.line,
@@ -101,7 +204,6 @@ class Interpreter:
         )
 
     def execute_block(self, statements: list[Statement], block_env: Environment) -> Any:
-        """Execute a series of statements in an isolated scope."""
         previous_env = self.environment
         try:
             self.environment = block_env
@@ -115,7 +217,6 @@ class Interpreter:
     # ------------------ Expression Evaluation ------------------
 
     def evaluate(self, expr: Expression) -> Any:
-        """Evaluate an expression AST node and return its runtime value."""
         if isinstance(expr, NumberLiteral):
             return expr.value
 
@@ -148,6 +249,9 @@ class Interpreter:
             self.environment.assign(expr.name, value, expr.line, expr.column, self.source_code)
             return value
 
+        if isinstance(expr, AugmentedAssignment):
+            return self._evaluate_augmented_assignment(expr)
+
         if isinstance(expr, CallExpression):
             return self._evaluate_call(expr)
 
@@ -157,6 +261,46 @@ class Interpreter:
             column=expr.column,
             source_code=self.source_code,
         )
+
+    def _evaluate_augmented_assignment(self, expr: AugmentedAssignment) -> Any:
+        current = self.environment.get(expr.name, expr.line, expr.column, self.source_code)
+        val = self.evaluate(expr.value)
+        op = expr.operator
+
+        if op == "+=":
+            if isinstance(current, (int, float)) and not isinstance(current, bool) and \
+               isinstance(val, (int, float)) and not isinstance(val, bool):
+                new_val = current + val
+            elif isinstance(current, str) and isinstance(val, str):
+                new_val = current + val
+            else:
+                raise FlowRuntimeError(
+                    f"Unsupported operand types for +=: '{self._type_name(current)}' and '{self._type_name(val)}'",
+                    line=expr.line,
+                    column=expr.column,
+                    source_code=self.source_code,
+                )
+        elif op in ("-=", "*=", "/="):
+            self._check_number_operands(op, current, val, expr.line, expr.column)
+            if op == "-=":
+                new_val = current - val
+            elif op == "*=":
+                new_val = current * val
+            elif op == "/=":
+                if val == 0:
+                    raise FlowRuntimeError(
+                        "Division by zero",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+                res = current / val
+                new_val = int(res) if res.is_integer() and isinstance(current, int) and isinstance(val, int) else res
+        else:
+            raise FlowRuntimeError(f"Unknown augmented assignment operator '{op}'", line=expr.line, column=expr.column, source_code=self.source_code)
+
+        self.environment.assign(expr.name, new_val, expr.line, expr.column, self.source_code)
+        return new_val
 
     def _evaluate_unary(self, expr: UnaryOp) -> Any:
         operand = self.evaluate(expr.operand)
@@ -182,7 +326,6 @@ class Interpreter:
         )
 
     def _evaluate_logical(self, expr: LogicalOp) -> Any:
-        """Evaluate short-circuiting logical AND / OR operators."""
         left = self.evaluate(expr.left)
 
         if expr.operator == "or":
@@ -207,7 +350,6 @@ class Interpreter:
         right = self.evaluate(expr.right)
         op = expr.operator
 
-        # Arithmetic operators
         if op == "+":
             if isinstance(left, (int, float)) and not isinstance(left, bool) and \
                isinstance(right, (int, float)) and not isinstance(right, bool):
@@ -247,7 +389,6 @@ class Interpreter:
                     )
                 return left % right
 
-        # Comparison operators
         if op in (">", ">=", "<", "<="):
             self._check_number_operands(op, left, right, expr.line, expr.column)
             if op == ">":
@@ -259,7 +400,6 @@ class Interpreter:
             if op == "<=":
                 return left <= right
 
-        # Equality operators
         if op == "==":
             return left == right
 
@@ -291,7 +431,6 @@ class Interpreter:
     # ------------------ Runtime Helpers ------------------
 
     def _is_truthy(self, value: Any) -> bool:
-        """Python-style truthiness: False, None, 0, and empty string are falsey."""
         if value is None:
             return False
         if isinstance(value, bool):
@@ -299,6 +438,8 @@ class Interpreter:
         if isinstance(value, (int, float)):
             return value != 0
         if isinstance(value, str):
+            return len(value) > 0
+        if isinstance(value, (list, tuple, dict)):
             return len(value) > 0
         return True
 
@@ -325,4 +466,6 @@ class Interpreter:
             return "float"
         if isinstance(val, str):
             return "str"
+        if isinstance(val, list):
+            return "list"
         return type(val).__name__

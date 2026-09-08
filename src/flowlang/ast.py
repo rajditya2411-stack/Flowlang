@@ -108,6 +108,16 @@ class Assignment(Expression):
 
 
 @dataclass
+class AugmentedAssignment(Expression):
+    name: str
+    operator: str  # "+=", "-=", "*=", "/="
+    value: Expression
+
+    def __repr__(self) -> str:
+        return f"AugAssign({self.name} {self.operator} {self.value})"
+
+
+@dataclass
 class CallExpression(Expression):
     callee: Expression
     arguments: list[Expression]
@@ -169,6 +179,16 @@ class WhileStatement(Statement):
 
     def __repr__(self) -> str:
         return f"While({self.condition}, body={self.body})"
+
+
+@dataclass
+class ForStatement(Statement):
+    target: str
+    iterable: Expression
+    body: Statement
+
+    def __repr__(self) -> str:
+        return f"For({self.target} in {self.iterable}, body={self.body})"
 
 
 @dataclass
