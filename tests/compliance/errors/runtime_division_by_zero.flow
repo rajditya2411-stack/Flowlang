@@ -1,0 +1,2 @@
+# Runtime Error: Division by Zero
+x = 10 / 0

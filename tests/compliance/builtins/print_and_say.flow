@@ -1,0 +1,3 @@
+# Built-in print() and say()
+print("Hello", "World", 42, True, None)
+say("Speaking from FlowLang:", 100)

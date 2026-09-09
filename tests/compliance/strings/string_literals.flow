@@ -1,0 +1,8 @@
+# String Literals and Escapes
+s1 = "Hello, FlowLang!"
+s2 = 'Single quoted string'
+print(s1)
+print(s2)
+
+escaped = "Line 1\nLine 2\tTabbed \"Quoted\""
+print(escaped)

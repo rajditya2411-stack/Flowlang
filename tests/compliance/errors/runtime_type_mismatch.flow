@@ -1,0 +1,2 @@
+# Runtime Error: Type Mismatch in Addition
+x = 10 + "hello"

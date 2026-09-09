@@ -1,0 +1,3 @@
+# For Loop over String
+for char in "Flow":
+    print("char:", char)

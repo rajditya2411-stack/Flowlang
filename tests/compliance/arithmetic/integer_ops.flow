@@ -1,0 +1,9 @@
+# Integer Arithmetic Operations
+print(1 + 2)
+print(10 - 4)
+print(3 * 7)
+print(20 / 4)
+print(7 % 3)
+print(-42)
+print(-(-15))
+print(100 - 50 - 25)

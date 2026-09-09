@@ -17,8 +17,17 @@ from flowlang.server import PlaygroundRequestHandler
 class TestPlaygroundServer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Start test HTTP server on an OS-assigned ephemeral port
-        cls.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), PlaygroundRequestHandler)
+        # Start test HTTP server with port fallback for Windows environments
+        ports_to_try = [0, 8510, 8511, 8512, 8513, 8514, 8515, 8890]
+        cls.httpd = None
+        for p in ports_to_try:
+            try:
+                cls.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", p), PlaygroundRequestHandler)
+                break
+            except Exception:
+                continue
+        if cls.httpd is None:
+            raise RuntimeError("Could not bind test HTTP server to any port.")
         cls.port = cls.httpd.server_port
         cls.server_thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
         cls.server_thread.start()

@@ -1,0 +1,5 @@
+FlowLang ParserError: Expected ':' after condition
+  at line 2, column 9
+
+  2 | if x > 0
+              ^

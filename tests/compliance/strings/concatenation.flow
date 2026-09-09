@@ -1,0 +1,8 @@
+# String Concatenation
+first = "Flow"
+second = "Lang"
+full = first + second
+print(full)
+
+greeting = "Hello " + "World" + "!"
+print(greeting)

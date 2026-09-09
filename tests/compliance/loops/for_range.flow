@@ -1,0 +1,12 @@
+# For Loops with range()
+# 1-arg range
+for i in range(3):
+    print("step:", i)
+
+# 2-arg range
+for i in range(2, 5):
+    print("range(2,5):", i)
+
+# 3-arg countdown range
+for i in range(5, 0, -1):
+    print("countdown:", i)

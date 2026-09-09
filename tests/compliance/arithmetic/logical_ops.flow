@@ -1,0 +1,13 @@
+# Logical Operators & Short-circuiting
+print(True and True)
+print(True and False)
+print(False and True)
+print(False or True)
+print(False or False)
+print(not True)
+print(not False)
+print(10 > 5 and 20 > 10)
+print(10 > 5 and 20 < 10)
+print(10 < 5 or 20 > 10)
+print(not (10 == 10))
+print(not (10 != 10))

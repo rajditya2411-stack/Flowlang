@@ -1,0 +1,6 @@
+# Built-in len() and abs()
+print("len string:", len("FlowLang"))
+print("len empty string:", len(""))
+print("abs positive:", abs(42))
+print("abs negative:", abs(-42))
+print("abs float:", abs(-3.14))

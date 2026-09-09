@@ -1,0 +1,5 @@
+FlowLang RuntimeError: Operands for '+' must both be numbers or both be strings, got int and str
+  at line 2, column 5
+
+  2 | x = 10 + "hello"
+          ^

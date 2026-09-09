@@ -1,0 +1,5 @@
+len string: 8
+len empty string: 0
+abs positive: 42
+abs negative: 42
+abs float: 3.14

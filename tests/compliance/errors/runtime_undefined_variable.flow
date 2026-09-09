@@ -1,0 +1,3 @@
+# Runtime Error: Undefined Variable
+a = 10
+print(b)

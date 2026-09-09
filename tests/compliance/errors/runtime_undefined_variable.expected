@@ -1,0 +1,5 @@
+FlowLang RuntimeError: Undefined variable 'b'
+  at line 3, column 7
+
+  3 | print(b)
+            ^

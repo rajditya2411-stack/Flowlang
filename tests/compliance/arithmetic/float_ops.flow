@@ -1,0 +1,6 @@
+# Float Operations
+print(2.5 + 1.25)
+print(10.0 - 4.5)
+print(2.5 * 4)
+print(7.5 / 2.5)
+print(10 / 4)
