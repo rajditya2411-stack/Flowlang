@@ -32,11 +32,17 @@ class PlaygroundRequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 data = json.loads(body) if body else {}
                 code = data.get("code", "")
+                inputs = data.get("inputs", [])
             except Exception as e:
                 self._send_json({"error": {"message": f"Invalid JSON payload: {e}"}}, status=400)
                 return
 
-            result = execute(code)
+            def web_input_handler(prompt: str) -> str:
+                if inputs:
+                    return str(inputs.pop(0))
+                return ""
+
+            result = execute(code, input_handler=web_input_handler)
 
             response_data = {
                 "output": result.output,
