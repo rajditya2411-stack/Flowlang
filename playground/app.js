@@ -231,6 +231,19 @@ async function runCode() {
     return;
   }
 
+  const inputs = [];
+  const inputMatches = code.match(/input\s*\(\s*(?:"([^"]*)"|'([^']*)')?\s*\)/g);
+  if (inputMatches) {
+    for (const match of inputMatches) {
+      const promptMatch = match.match(/input\s*\(\s*(?:"([^"]*)"|'([^']*)')?\s*\)/);
+      const promptText = (promptMatch && (promptMatch[1] || promptMatch[2])) || "Enter input:";
+      const val = window.prompt(promptText, "5");
+      if (val !== null) {
+        inputs.push(val);
+      }
+    }
+  }
+
   execStatus.className = "status-badge status-ready";
   execStatus.textContent = "Running...";
   const startTime = performance.now();
@@ -239,7 +252,7 @@ async function runCode() {
     const response = await fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code })
+      body: JSON.stringify({ code, inputs })
     });
 
     const elapsed = Math.round(performance.now() - startTime);
