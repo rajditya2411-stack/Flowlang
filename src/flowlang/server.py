@@ -39,8 +39,10 @@ class PlaygroundRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             def web_input_handler(prompt: str) -> str:
                 if inputs:
-                    return str(inputs.pop(0))
-                return ""
+                    val = str(inputs.pop(0)).strip()
+                    if val:
+                        return val
+                return "0"
 
             result = execute(code, input_handler=web_input_handler)
 
