@@ -1,14 +1,7 @@
-# Built-in type() and Cast Functions
-print(type(10))
-print(type(3.14))
-print(type("hello"))
-print(type(True))
-print(type(None))
-
-print("int cast:", int("42") + 8)
-print("float cast:", float("3.5") + 1.5)
-print("str cast:", str(123) + "xyz")
-print("bool cast 1:", bool(1))
-print("bool cast 0:", bool(0))
-print("bool cast str:", bool("text"))
-print("bool cast empty:", bool(""))
+# Built-in Cast Functions and pow_
+say("int cast:", int("42") + 8)
+say("flt cast:", flt("3.5") + 1.5)
+say("str cast:", str(123) + "xyz")
+say("bool true:", bool("true"))
+say("bool false:", bool("false"))
+say("pow:", pow_(2, 3))

@@ -1,18 +1,18 @@
 # Variable Assignment and Evaluation
-a = 10
-b = 20
-c = a + b
-print("a:", a)
-print("b:", b)
-print("c:", c)
+lit a = 10
+lit b = 20
+lit c = a + b
+say("a:", a)
+say("b:", b)
+say("c:", c)
 
 # Reassignment
 a = 50
-print("new a:", a)
-print("c unchanged:", c)
+say("new a:", a)
+say("c unchanged:", c)
 
-# Chained or sequential updates
-x = 1
+# Sequential updates
+lit x = 1
 x = x + 1
 x = x + 1
-print("x:", x)
+say("x:", x)

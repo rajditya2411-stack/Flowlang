@@ -1,3 +1,0 @@
-# Runtime Error: Non-iterable in for-loop
-for x in 123:
-    print(x)

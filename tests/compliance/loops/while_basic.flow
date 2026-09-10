@@ -1,7 +1,8 @@
 # Basic While Loop
-i = 0
-while i < 5:
-    print("i =", i)
-    i += 1
+lit i = 0
+while i < 5 {
+    say("i =", i)
+    i = i + 1
+}
 
-print("done while")
+say("done while")

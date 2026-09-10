@@ -1,7 +1,8 @@
 """FlowLang Token Definitions.
 
 Defines all token types and the Token representation with source location tracking.
-Supports Python-like syntax including INDENT, DEDENT, colons, loops, and operators.
+Supports FlowLang V1 syntax with brace blocks, typed/dynamic variable declarations,
+loops, functions, logical operators, and literals.
 """
 
 from enum import Enum, auto
@@ -11,30 +12,43 @@ from typing import Any
 
 class TokenType(Enum):
     # Literals
-    NUMBER = auto()
-    STRING = auto()
-    IDENTIFIER = auto()
+    NUMBER = auto()         # Integer or Float numeric literal
+    STRING = auto()         # Double-quoted string "..."
+    CHAR = auto()           # Single-quoted character 'c'
+    IDENTIFIER = auto()     # Identifier name
 
-    # Keywords & Literals
-    TRUE = auto()
-    FALSE = auto()
-    NONE = auto()
+    # Boolean Literals
+    TRUE = auto()           # true
+    FALSE = auto()          # false
+
+    # Type & Variable Declaration Keywords
+    LIT = auto()            # lit
+    INT = auto()            # int
+    FLT = auto()            # flt
+    STR = auto()            # str
+    CHAR_TYPE = auto()      # char
+    BOOL_TYPE = auto()      # bool
 
     # Control Flow Keywords
-    IF = auto()
-    ELIF = auto()
-    ELSE = auto()
-    WHILE = auto()
-    FOR = auto()
-    IN = auto()
-    DEF = auto()
-    RETURN = auto()
-    LET = auto()            # Optional backwards-compatibility
+    IF = auto()             # if
+    ELIF = auto()           # elif
+    ELSE = auto()           # else
+    WHILE = auto()          # while
+    DO = auto()             # do
+    FOR = auto()            # for
+    IN = auto()             # in
 
-    # Logical Operators
-    AND = auto()
-    OR = auto()
-    NOT = auto()
+    # Function & Return Keywords
+    DFN = auto()            # dfn
+    RETURN = auto()         # return
+
+    # Output Keyword / Identifier
+    SAY = auto()            # say
+
+    # Logical Operators (word-based)
+    AND = auto()            # and
+    OR = auto()             # or
+    NOT = auto()            # not
 
     # Arithmetic & Assignment Operators
     PLUS = auto()           # +
@@ -43,10 +57,6 @@ class TokenType(Enum):
     SLASH = auto()          # /
     MODULO = auto()         # %
     ASSIGN = auto()         # =
-    PLUS_ASSIGN = auto()    # +=
-    MINUS_ASSIGN = auto()   # -=
-    STAR_ASSIGN = auto()    # *=
-    SLASH_ASSIGN = auto()   # /=
 
     # Comparison Operators
     EQUAL = auto()          # ==
@@ -55,51 +65,43 @@ class TokenType(Enum):
     GREATER = auto()        # >
     LESS_EQUAL = auto()     # <=
     GREATER_EQUAL = auto()  # >=
-    BANG = auto()           # !
 
     # Punctuation & Delimiters
-    COLON = auto()          # :
     COMMA = auto()          # ,
-    DOT = auto()            # .
     SEMICOLON = auto()      # ;
     LPAREN = auto()         # (
     RPAREN = auto()         # )
-    LBRACKET = auto()       # [
-    RBRACKET = auto()       # ]
     LBRACE = auto()         # {
     RBRACE = auto()         # }
 
-    # Indentation & Structural
+    # Structural
     NEWLINE = auto()
-    INDENT = auto()
-    DEDENT = auto()
     EOF = auto()
 
 
-# Keyword lookup table
+# Keyword lookup table for FlowLang V1 (all lowercase)
 KEYWORDS: dict[str, TokenType] = {
-    "True": TokenType.TRUE,
-    "False": TokenType.FALSE,
-    "None": TokenType.NONE,
+    "true": TokenType.TRUE,
+    "false": TokenType.FALSE,
+    "lit": TokenType.LIT,
+    "int": TokenType.INT,
+    "flt": TokenType.FLT,
+    "str": TokenType.STR,
+    "char": TokenType.CHAR_TYPE,
+    "bool": TokenType.BOOL_TYPE,
     "if": TokenType.IF,
     "elif": TokenType.ELIF,
     "else": TokenType.ELSE,
     "while": TokenType.WHILE,
+    "do": TokenType.DO,
     "for": TokenType.FOR,
     "in": TokenType.IN,
-    "def": TokenType.DEF,
+    "dfn": TokenType.DFN,
     "return": TokenType.RETURN,
+    "say": TokenType.SAY,
     "and": TokenType.AND,
     "or": TokenType.OR,
     "not": TokenType.NOT,
-
-    # Fallbacks / aliases
-    "true": TokenType.TRUE,
-    "false": TokenType.FALSE,
-    "none": TokenType.NONE,
-    "nil": TokenType.NONE,
-    "fn": TokenType.DEF,
-    "let": TokenType.LET,
 }
 
 

@@ -1,4 +1,4 @@
 # Error demonstration
-username = "Alice"
-print("Hello")
-print(invalid_var)
+str username = "Alice"
+say("Hello", username)
+say(invalid_var)

@@ -53,7 +53,7 @@ class TestPlaygroundServer(unittest.TestCase):
             self.assertIn("--bg-dark", content)
 
     def test_api_run_calculator_variables(self):
-        code = "a = 4\nb = 4\nprint(a + b)"
+        code = "lit a = 4\nlit b = 4\nsay(a + b)"
         payload = json.dumps({"code": code}).encode("utf-8")
         req = urllib.request.Request(
             self.base_url + "/api/run",
@@ -68,7 +68,7 @@ class TestPlaygroundServer(unittest.TestCase):
             self.assertEqual(data["output"], "8")
 
     def test_api_run_while_loop(self):
-        code = "count = 0\nwhile count < 3:\n    count = count + 1\n    print(count)"
+        code = "lit count = 0\nwhile count < 3 {\n    count = count + 1\n    say(count)\n}"
         payload = json.dumps({"code": code}).encode("utf-8")
         req = urllib.request.Request(
             self.base_url + "/api/run",
@@ -83,7 +83,7 @@ class TestPlaygroundServer(unittest.TestCase):
             self.assertEqual(data["output"], "1\n2\n3")
 
     def test_api_run_syntax_error(self):
-        code = "if x > 0\n    print(1)"
+        code = "if x > 0 say(1)"
         payload = json.dumps({"code": code}).encode("utf-8")
         req = urllib.request.Request(
             self.base_url + "/api/run",
@@ -96,7 +96,7 @@ class TestPlaygroundServer(unittest.TestCase):
             data = json.loads(resp.read().decode("utf-8"))
             self.assertIsNotNone(data["error"])
             self.assertEqual(data["error"]["type"], "ParserError")
-            self.assertIn("Expected ':' after condition", data["formatted_error"])
+            self.assertIn("Expected '{' to start block", data["formatted_error"])
 
 
 if __name__ == "__main__":

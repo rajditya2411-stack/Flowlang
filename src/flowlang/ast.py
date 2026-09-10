@@ -1,6 +1,6 @@
 """FlowLang Abstract Syntax Tree (AST) definitions.
 
-AST nodes represent the syntactic structure of FlowLang programs.
+AST nodes represent the syntactic structure of FlowLang V1 programs.
 Nodes are purely structural data containers with line/column tracking.
 """
 
@@ -40,17 +40,19 @@ class StringLiteral(Expression):
 
 
 @dataclass
+class CharLiteral(Expression):
+    value: str
+
+    def __repr__(self) -> str:
+        return f"Char({self.value!r})"
+
+
+@dataclass
 class BooleanLiteral(Expression):
     value: bool
 
     def __repr__(self) -> str:
         return f"Bool({self.value})"
-
-
-@dataclass
-class NoneLiteral(Expression):
-    def __repr__(self) -> str:
-        return "None"
 
 
 @dataclass
@@ -108,16 +110,6 @@ class Assignment(Expression):
 
 
 @dataclass
-class AugmentedAssignment(Expression):
-    name: str
-    operator: str  # "+=", "-=", "*=", "/="
-    value: Expression
-
-    def __repr__(self) -> str:
-        return f"AugAssign({self.name} {self.operator} {self.value})"
-
-
-@dataclass
 class CallExpression(Expression):
     callee: Expression
     arguments: list[Expression]
@@ -145,11 +137,12 @@ class ExpressionStatement(Statement):
 
 @dataclass
 class VariableDeclaration(Statement):
+    type_name: str  # "lit", "int", "flt", "str", "char", "bool"
     name: str
     initializer: Expression
 
     def __repr__(self) -> str:
-        return f"VarDecl({self.name} = {self.initializer})"
+        return f"VarDecl({self.type_name} {self.name} = {self.initializer})"
 
 
 @dataclass
@@ -182,13 +175,43 @@ class WhileStatement(Statement):
 
 
 @dataclass
+class DoWhileStatement(Statement):
+    body: Statement
+    condition: Expression
+
+    def __repr__(self) -> str:
+        return f"DoWhile(body={self.body}, cond={self.condition})"
+
+
+@dataclass
 class ForStatement(Statement):
     target: str
-    iterable: Expression
+    init_expr: Expression
+    condition: Expression
+    update: Expression
     body: Statement
 
     def __repr__(self) -> str:
-        return f"For({self.target} in {self.iterable}, body={self.body})"
+        return f"For({self.target} in ({self.init_expr}; {self.condition}; {self.update}), body={self.body})"
+
+
+@dataclass
+class FunctionDeclaration(Statement):
+    name: str
+    parameters: list[str]
+    body: Block
+
+    def __repr__(self) -> str:
+        params = ", ".join(self.parameters)
+        return f"Dfn({self.name}({params}), body={self.body})"
+
+
+@dataclass
+class ReturnStatement(Statement):
+    expression: Optional[Expression] = None
+
+    def __repr__(self) -> str:
+        return f"Return({self.expression})"
 
 
 @dataclass

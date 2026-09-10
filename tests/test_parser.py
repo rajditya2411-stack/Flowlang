@@ -1,4 +1,4 @@
-"""Tests for FlowLang Parser & AST (Python-style syntax)."""
+"""Tests for FlowLang Parser & AST (FlowLang V1 syntax)."""
 
 import unittest
 import sys
@@ -18,13 +18,17 @@ from flowlang.ast import (
     Grouping,
     NumberLiteral,
     StringLiteral,
+    CharLiteral,
     BooleanLiteral,
-    NoneLiteral,
     Identifier,
     Assignment,
     Block,
     IfStatement,
     WhileStatement,
+    DoWhileStatement,
+    ForStatement,
+    FunctionDeclaration,
+    ReturnStatement,
     CallExpression,
 )
 from flowlang.errors import ParserError
@@ -43,6 +47,12 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(stmt, ExpressionStatement)
         self.assertIsInstance(stmt.expression, NumberLiteral)
         self.assertEqual(stmt.expression.value, 42)
+
+    def test_char_literal(self):
+        program = parse_source("'Z'")
+        stmt = program.statements[0]
+        self.assertIsInstance(stmt.expression, CharLiteral)
+        self.assertEqual(stmt.expression.value, "Z")
 
     def test_operator_precedence(self):
         program = parse_source("2 + 3 * 4")
@@ -83,24 +93,37 @@ class TestParser(unittest.TestCase):
         self.assertEqual(stmt.expression.name, "x")
         self.assertEqual(stmt.expression.value.value, 50)
 
+    def test_variable_declarations(self):
+        program = parse_source("lit x = 10\nint y = 20\nflt z = 3.14\nstr s = \"hello\"\nchar c = 'A'\nbool b = true")
+        self.assertEqual(len(program.statements), 6)
+        for stmt in program.statements:
+            self.assertIsInstance(stmt, VariableDeclaration)
+        self.assertEqual(program.statements[0].type_name, "lit")
+        self.assertEqual(program.statements[1].type_name, "int")
+        self.assertEqual(program.statements[2].type_name, "flt")
+        self.assertEqual(program.statements[3].type_name, "str")
+        self.assertEqual(program.statements[4].type_name, "char")
+        self.assertEqual(program.statements[5].type_name, "bool")
+
     def test_call_expression(self):
-        program = parse_source("print(x, 10)")
+        program = parse_source("say(x, 10)")
         expr = program.statements[0].expression
         self.assertIsInstance(expr, CallExpression)
-        self.assertEqual(expr.callee.name, "print")
+        self.assertEqual(expr.callee.name, "say")
         self.assertEqual(len(expr.arguments), 2)
         self.assertEqual(expr.arguments[0].name, "x")
         self.assertEqual(expr.arguments[1].value, 10)
 
     def test_if_elif_else_statement(self):
         source = """
-if x > 0:
-    y = 1
-elif x == 0:
-    y = 0
-else:
-    y = -1
-"""
+        if x > 0 {
+            y = 1
+        } elif x == 0 {
+            y = 0
+        } else {
+            y = -1
+        }
+        """
         program = parse_source(source)
         stmt = program.statements[0]
         self.assertIsInstance(stmt, IfStatement)
@@ -111,20 +134,61 @@ else:
 
     def test_while_statement(self):
         source = """
-while x < 10:
-    x = x + 1
-"""
+        while x < 10 {
+            x = x + 1
+        }
+        """
         program = parse_source(source)
         stmt = program.statements[0]
         self.assertIsInstance(stmt, WhileStatement)
         self.assertEqual(stmt.condition.operator, "<")
         self.assertIsInstance(stmt.body, Block)
 
-    def test_missing_colon_error(self):
+    def test_do_while_statement(self):
+        source = """
+        do {
+            x = x + 1
+        } while x < 10
+        """
+        program = parse_source(source)
+        stmt = program.statements[0]
+        self.assertIsInstance(stmt, DoWhileStatement)
+        self.assertIsInstance(stmt.body, Block)
+        self.assertEqual(stmt.condition.operator, "<")
+
+    def test_for_statement(self):
+        source = """
+        for i in (1; i <= 10; i = i + 1) {
+            say(i)
+        }
+        """
+        program = parse_source(source)
+        stmt = program.statements[0]
+        self.assertIsInstance(stmt, ForStatement)
+        self.assertEqual(stmt.target, "i")
+        self.assertEqual(stmt.init_expr.value, 1)
+        self.assertEqual(stmt.condition.operator, "<=")
+        self.assertIsInstance(stmt.body, Block)
+
+    def test_dfn_statement(self):
+        source = """
+        dfn add(a, b) {
+            return a + b
+        }
+        """
+        program = parse_source(source)
+        stmt = program.statements[0]
+        self.assertIsInstance(stmt, FunctionDeclaration)
+        self.assertEqual(stmt.name, "add")
+        self.assertEqual(stmt.parameters, ["a", "b"])
+        self.assertIsInstance(stmt.body.statements[0], ReturnStatement)
+
+    def test_missing_brace_error(self):
         with self.assertRaises(ParserError) as ctx:
-            parse_source("if x > 0\n    y = 1")
-        self.assertIn("Expected ':'", str(ctx.exception))
+            parse_source("if x > 0 y = 1")
+        self.assertIn("Expected '{' to start block", str(ctx.exception))
 
 
 if __name__ == "__main__":
     unittest.main()
+

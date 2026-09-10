@@ -1,4 +1,4 @@
-"""Tests for FlowLang Interpreter & Runtime (Python-style syntax)."""
+"""Tests for FlowLang Interpreter & Runtime (FlowLang V1 syntax)."""
 
 import unittest
 import sys
@@ -27,16 +27,15 @@ class TestInterpreter(unittest.TestCase):
         self.assertEqual(run_code("(2 + 3) * 4"), 20)
         self.assertEqual(run_code("2 + 3 * 4"), 14)
         self.assertEqual(run_code("10 - 4 - 2"), 4)
-        self.assertEqual(run_code("20 / 4"), 5)
+        self.assertEqual(run_code("20 / 4"), 5.0)
         self.assertEqual(run_code("7 % 3"), 1)
 
     def test_calculator_variables(self):
-        # Specific user requirement: a = 4; b = 4; a + b -> 8
         source = """
-a = 4
-b = 4
-a + b
-"""
+        lit a = 4
+        lit b = 4
+        a + b
+        """
         self.assertEqual(run_code(source), 8)
 
     def test_float_arithmetic(self):
@@ -44,15 +43,17 @@ a + b
 
     def test_string_concatenation(self):
         self.assertEqual(run_code('"Hello, " + "FlowLang!"'), "Hello, FlowLang!")
+        self.assertEqual(run_code('"Result: " + 42'), "Result: 42")
+        self.assertEqual(run_code('10 + " apples"'), "10 apples")
 
     def test_unary_operations(self):
         self.assertEqual(run_code("-42"), -42)
-        self.assertEqual(run_code("not True"), False)
-        self.assertEqual(run_code("not False"), True)
+        self.assertEqual(run_code("not true"), False)
+        self.assertEqual(run_code("not false"), True)
 
     def test_logical_operators_and_or(self):
-        self.assertEqual(run_code("True and False"), False)
-        self.assertEqual(run_code("True or False"), True)
+        self.assertEqual(run_code("true and false"), False)
+        self.assertEqual(run_code("true or false"), True)
         self.assertEqual(run_code("10 > 5 and 2 < 4"), True)
 
     def test_comparisons(self):
@@ -65,54 +66,57 @@ a + b
 
     def test_variables_and_reassignment(self):
         source = """
-x = 10
-y = 20
-x = x + y
-x
-"""
+        lit x = 10
+        lit y = 20
+        x = x + y
+        x
+        """
         self.assertEqual(run_code(source), 30)
 
     def test_if_elif_else(self):
         source1 = """
-x = 10
-res = 0
-if x > 5:
-    res = 100
-else:
-    res = 200
-res
-"""
+        lit x = 10
+        lit res = 0
+        if x > 5 {
+            res = 100
+        } else {
+            res = 200
+        }
+        res
+        """
         self.assertEqual(run_code(source1), 100)
 
         source2 = """
-x = 0
-res = 0
-if x > 0:
-    res = 1
-elif x == 0:
-    res = 42
-else:
-    res = -1
-res
-"""
+        lit x = 0
+        lit res = 0
+        if x > 0 {
+            res = 1
+        } elif x == 0 {
+            res = 42
+        } else {
+            res = -1
+        }
+        res
+        """
         self.assertEqual(run_code(source2), 42)
 
     def test_while_loop(self):
         source = """
-count = 0
-while count < 5:
-    count = count + 1
-count
-"""
+        lit count = 0
+        while count < 5 {
+            count = count + 1
+        }
+        count
+        """
         self.assertEqual(run_code(source), 5)
 
-    def test_builtin_print(self):
+    def test_builtin_say(self):
         output = []
         source = """
-name = "FlowLang"
-print("Hello", name)
-print(10 + 20)
-"""
+        str name = "FlowLang"
+        say("Hello", name)
+        say(10 + 20)
+        """
         run_code(source, output_collector=output)
         self.assertEqual(output, ["Hello FlowLang", "30"])
 
@@ -121,11 +125,12 @@ print(10 + 20)
             run_code("10 / 0")
         self.assertIn("Division by zero", str(ctx.exception))
 
-    def test_type_mismatch_in_addition(self):
+    def test_invalid_string_subtraction(self):
         with self.assertRaises(FlowRuntimeError) as ctx:
-            run_code('10 + "hello"')
-        self.assertIn("Operands for '+' must both be numbers or both be strings", str(ctx.exception))
+            run_code('"hello" - 5')
+        self.assertIn("Operands for '-' must be numbers", str(ctx.exception))
 
 
 if __name__ == "__main__":
     unittest.main()
+

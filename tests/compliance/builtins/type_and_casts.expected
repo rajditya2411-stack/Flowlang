@@ -1,12 +1,6 @@
-int
-float
-str
-bool
-None
 int cast: 50
-float cast: 5.0
+flt cast: 5.0
 str cast: 123xyz
-bool cast 1: True
-bool cast 0: False
-bool cast str: True
-bool cast empty: False
+bool true: true
+bool false: false
+pow: 8

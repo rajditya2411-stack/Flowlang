@@ -1,4 +1,4 @@
-"""Tests for FlowLang Error System (Python-style syntax)."""
+"""Tests for FlowLang Error System (FlowLang V1 syntax)."""
 
 import unittest
 import sys
@@ -21,7 +21,7 @@ def execute_flow(source: str):
 
 class TestErrorSystem(unittest.TestCase):
     def test_lexer_error_formatting(self):
-        source = 'x = "unterminated'
+        source = 'lit x = "unterminated'
         try:
             execute_flow(source)
             self.fail("Expected LexerError")
@@ -29,21 +29,21 @@ class TestErrorSystem(unittest.TestCase):
             formatted = err.format_error(source)
             self.assertEqual(err.line, 1)
             self.assertIn("FlowLang LexerError: Unterminated string literal", formatted)
-            self.assertIn('1 | x = "unterminated', formatted)
+            self.assertIn('1 | lit x = "unterminated', formatted)
 
     def test_parser_error_formatting(self):
-        source = "if x > 0\n    y = 1"
+        source = "if x > 0 y = 1"
         try:
             execute_flow(source)
             self.fail("Expected ParserError")
         except ParserError as err:
             formatted = err.format_error(source)
             self.assertEqual(err.line, 1)
-            self.assertIn("FlowLang ParserError: Expected ':' after condition", formatted)
-            self.assertIn("1 | if x > 0", formatted)
+            self.assertIn("FlowLang ParserError: Expected '{' to start block", formatted)
+            self.assertIn("1 | if x > 0 y = 1", formatted)
 
     def test_runtime_undefined_variable_formatting(self):
-        source = "x = 10\nprint(username)"
+        source = "lit x = 10\nsay(username)"
         try:
             execute_flow(source)
             self.fail("Expected FlowRuntimeError")
@@ -51,10 +51,10 @@ class TestErrorSystem(unittest.TestCase):
             formatted = err.format_error(source)
             self.assertEqual(err.line, 2)
             self.assertIn("FlowLang RuntimeError: Undefined variable 'username'", formatted)
-            self.assertIn("2 | print(username)", formatted)
+            self.assertIn("2 | say(username)", formatted)
 
     def test_runtime_division_by_zero_formatting(self):
-        source = "a = 10\nb = 0\nc = a / b"
+        source = "lit a = 10\nlit b = 0\nlit c = a / b"
         try:
             execute_flow(source)
             self.fail("Expected FlowRuntimeError")
@@ -62,8 +62,9 @@ class TestErrorSystem(unittest.TestCase):
             formatted = err.format_error(source)
             self.assertEqual(err.line, 3)
             self.assertIn("Division by zero", formatted)
-            self.assertIn("3 | c = a / b", formatted)
+            self.assertIn("3 | lit c = a / b", formatted)
 
 
 if __name__ == "__main__":
     unittest.main()
+

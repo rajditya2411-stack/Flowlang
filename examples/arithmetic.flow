@@ -1,10 +1,11 @@
-# FlowLang Arithmetic & Conditionals (Python-style)
-a = 10
-b = 20
-result = (a + b) * 2 - 10 / 2
-print("Result is:", result)
+# FlowLang V1 Arithmetic & Conditionals
+int a = 10
+int b = 20
+flt result = (a + b) * 2 - 10 / 2
+say("Result is:", result)
 
-if result > 50:
-    print("Result is greater than 50!")
-else:
-    print("Result is 50 or less.")
+if result > 50 {
+    say("Result is greater than 50!")
+} else {
+    say("Result is 50 or less.")
+}

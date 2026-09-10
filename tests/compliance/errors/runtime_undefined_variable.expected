@@ -1,5 +1,5 @@
 FlowLang RuntimeError: Undefined variable 'b'
-  at line 3, column 7
+  at line 3, column 5
 
-  3 | print(b)
-            ^
+  3 | say(b)
+          ^

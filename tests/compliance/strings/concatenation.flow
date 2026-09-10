@@ -1,8 +1,8 @@
 # String Concatenation
-first = "Flow"
-second = "Lang"
-full = first + second
-print(full)
+lit first = "Flow"
+lit second = "Lang"
+lit full = first + second
+say(full)
 
-greeting = "Hello " + "World" + "!"
-print(greeting)
+lit greeting = "Hello " + "World" + "!"
+say(greeting)

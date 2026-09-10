@@ -1,3 +1,6 @@
-# For Loop over String
-for char in "Flow":
-    print("char:", char)
+# Do-While Loop
+lit i = 1
+do {
+    say("step:", i)
+    i = i + 1
+} while i <= 3

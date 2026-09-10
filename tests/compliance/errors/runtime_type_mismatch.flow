@@ -1,2 +1,3 @@
-# Runtime Error: Type Mismatch in Addition
-x = 10 + "hello"
+# Runtime Error: Type Mismatch
+int x = 10
+x = "hello"

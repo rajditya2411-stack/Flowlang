@@ -1,4 +1,4 @@
-# FlowLang Hello World (Python-style)
-greeting = "Hello, world from"
-language = "FlowLang"
-print(greeting, language)
+# FlowLang V1 Hello World
+str greeting = "Hello, world from"
+str language = "FlowLang"
+say(greeting, language)

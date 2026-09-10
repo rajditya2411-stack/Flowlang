@@ -1,0 +1,5 @@
+FlowLang RuntimeError: String multiplication requires a non-negative integer
+  at line 2, column 9
+
+  2 | lit s = "hello" * -1
+              ^

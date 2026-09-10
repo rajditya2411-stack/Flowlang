@@ -1,13 +1,12 @@
-"""FlowLang Tree-Walk Interpreter.
+"""FlowLang Tree-Walk Interpreter for FlowLang V1.
 
-Walks the Abstract Syntax Tree (AST), executing statements and evaluating expressions.
-Supports Python-like truthiness, short-circuit logical operators, for/while loops,
-augmented assignments, and built-in functions (print, range, len, abs, type, int, float, str, bool).
+Executes FlowLang V1 AST nodes, managing runtime environments, control flow
+(if/elif/else, while, do-while, for), function calls (dfn/return),
+static and dynamic typing, float division, and string operations.
 """
 
 from typing import Any, Callable, Optional
 from flowlang.ast import (
-    ASTNode,
     Program,
     Statement,
     Expression,
@@ -16,9 +15,11 @@ from flowlang.ast import (
     Block,
     IfStatement,
     WhileStatement,
+    DoWhileStatement,
     ForStatement,
+    FunctionDeclaration,
+    ReturnStatement,
     Assignment,
-    AugmentedAssignment,
     BinaryOp,
     LogicalOp,
     UnaryOp,
@@ -26,25 +27,36 @@ from flowlang.ast import (
     CallExpression,
     NumberLiteral,
     StringLiteral,
+    CharLiteral,
     BooleanLiteral,
-    NoneLiteral,
     Identifier,
 )
-from flowlang.runtime import Environment, FlowCallable, BuiltinFunction, stringify_value
+from flowlang.runtime import (
+    Environment,
+    FlowCallable,
+    BuiltinFunction,
+    UserFunction,
+    ReturnSignal,
+    Char,
+    stringify_value,
+    get_type_name,
+)
 from flowlang.errors import FlowRuntimeError
 
 
 class Interpreter:
-    """Evaluates FlowLang AST nodes."""
+    """Evaluates FlowLang V1 AST nodes."""
 
     def __init__(
         self,
         globals_env: Optional[Environment] = None,
         output_handler: Optional[Callable[[str], None]] = None,
+        input_handler: Optional[Callable[[str], str]] = None,
         source_code: Optional[str] = None,
     ):
         self.source_code = source_code
         self.output_handler = output_handler or print
+        self.input_handler = input_handler or input
         self.globals = globals_env if globals_env is not None else Environment()
         self.environment = self.globals
         self._init_builtins()
@@ -52,99 +64,107 @@ class Interpreter:
     def _init_builtins(self) -> None:
         """Register built-in functions in the global environment."""
 
-        # print(*args) / say(*args)
-        def builtin_print(interpreter: Any, args: list[Any], line: int, col: int) -> None:
+        # say(*args)
+        def builtin_say(interpreter: Any, args: list[Any], line: int, col: int) -> None:
             text = " ".join(stringify_value(arg) for arg in args)
             self.output_handler(text)
             return None
 
-        # range(stop) | range(start, stop) | range(start, stop, step)
-        def builtin_range(interpreter: Any, args: list[Any], line: int, col: int) -> list[int]:
-            if not args or len(args) > 3:
+        # pow_(base, exp)
+        def builtin_pow(interpreter: Any, args: list[Any], line: int, col: int) -> Any:
+            if len(args) != 2:
                 raise FlowRuntimeError(
-                    f"range expected 1 to 3 arguments, got {len(args)}",
-                    line=line, column=col, source_code=self.source_code
+                    f"pow_ expected 2 arguments, got {len(args)}",
+                    line=line,
+                    column=col,
+                    source_code=self.source_code,
                 )
-            for a in args:
-                if not isinstance(a, int) or isinstance(a, bool):
-                    raise FlowRuntimeError(
-                        f"range arguments must be integers, got {self._type_name(a)}",
-                        line=line, column=col, source_code=self.source_code
-                    )
-            if len(args) == 1:
-                return list(range(args[0]))
-            elif len(args) == 2:
-                return list(range(args[0], args[1]))
-            else:
-                if args[2] == 0:
-                    raise FlowRuntimeError("range step must not be zero", line=line, column=col, source_code=self.source_code)
-                return list(range(args[0], args[1], args[2]))
+            base, exp = args[0], args[1]
+            if not isinstance(base, (int, float)) or isinstance(base, bool) or \
+               not isinstance(exp, (int, float)) or isinstance(exp, bool):
+                raise FlowRuntimeError(
+                    "pow_ arguments must be numbers",
+                    line=line,
+                    column=col,
+                    source_code=self.source_code,
+                )
+            res = base ** exp
+            if isinstance(base, int) and isinstance(exp, int) and exp >= 0:
+                return int(res)
+            return float(res)
 
-        # len(obj)
-        def builtin_len(interpreter: Any, args: list[Any], line: int, col: int) -> int:
-            if len(args) != 1:
-                raise FlowRuntimeError(f"len() takes exactly one argument ({len(args)} given)", line=line, column=col, source_code=self.source_code)
-            obj = args[0]
-            if isinstance(obj, (str, list, tuple, dict)):
-                return len(obj)
-            raise FlowRuntimeError(f"object of type '{self._type_name(obj)}' has no len()", line=line, column=col, source_code=self.source_code)
-
-        # abs(x)
-        def builtin_abs(interpreter: Any, args: list[Any], line: int, col: int) -> Any:
-            if len(args) != 1:
-                raise FlowRuntimeError(f"abs() takes exactly one argument ({len(args)} given)", line=line, column=col, source_code=self.source_code)
-            val = args[0]
-            if isinstance(val, (int, float)) and not isinstance(val, bool):
-                return abs(val)
-            raise FlowRuntimeError(f"bad operand type for abs(): '{self._type_name(val)}'", line=line, column=col, source_code=self.source_code)
-
-        # type(x)
-        def builtin_type(interpreter: Any, args: list[Any], line: int, col: int) -> str:
-            if len(args) != 1:
-                raise FlowRuntimeError(f"type() takes exactly one argument ({len(args)} given)", line=line, column=col, source_code=self.source_code)
-            return self._type_name(args[0])
+        # input(prompt="")
+        def builtin_input(interpreter: Any, args: list[Any], line: int, col: int) -> str:
+            prompt = stringify_value(args[0]) if args else ""
+            try:
+                return self.input_handler(prompt)
+            except EOFError:
+                return ""
 
         # int(x)
         def builtin_int(interpreter: Any, args: list[Any], line: int, col: int) -> int:
             if len(args) != 1:
-                raise FlowRuntimeError("int() takes exactly one argument", line=line, column=col, source_code=self.source_code)
+                raise FlowRuntimeError("int() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
+            val = args[0]
             try:
-                if isinstance(args[0], bool):
-                    return 1 if args[0] else 0
-                return int(args[0])
+                if isinstance(val, bool):
+                    return 1 if val else 0
+                return int(val)
             except (ValueError, TypeError):
-                raise FlowRuntimeError(f"invalid literal for int(): {args[0]!r}", line=line, column=col, source_code=self.source_code)
+                raise FlowRuntimeError(f"invalid literal for int(): {val!r}", line=line, column=col, source_code=self.source_code)
 
-        # float(x)
-        def builtin_float(interpreter: Any, args: list[Any], line: int, col: int) -> float:
+        # flt(x)
+        def builtin_flt(interpreter: Any, args: list[Any], line: int, col: int) -> float:
             if len(args) != 1:
-                raise FlowRuntimeError("float() takes exactly one argument", line=line, column=col, source_code=self.source_code)
+                raise FlowRuntimeError("flt() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
+            val = args[0]
             try:
-                return float(args[0])
+                return float(val)
             except (ValueError, TypeError):
-                raise FlowRuntimeError(f"could not convert string to float: {args[0]!r}", line=line, column=col, source_code=self.source_code)
+                raise FlowRuntimeError(f"could not convert to flt: {val!r}", line=line, column=col, source_code=self.source_code)
 
         # str(x)
         def builtin_str(interpreter: Any, args: list[Any], line: int, col: int) -> str:
             if len(args) != 1:
-                raise FlowRuntimeError("str() takes exactly one argument", line=line, column=col, source_code=self.source_code)
+                raise FlowRuntimeError("str() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
             return stringify_value(args[0])
+
+        # char(x)
+        def builtin_char(interpreter: Any, args: list[Any], line: int, col: int) -> Char:
+            if len(args) != 1:
+                raise FlowRuntimeError("char() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
+            val = args[0]
+            if isinstance(val, Char):
+                return val
+            if isinstance(val, str) and len(val) == 1:
+                return Char(val)
+            raise FlowRuntimeError(
+                f"char() expected single character string, got {val!r}",
+                line=line,
+                column=col,
+                source_code=self.source_code,
+            )
 
         # bool(x)
         def builtin_bool(interpreter: Any, args: list[Any], line: int, col: int) -> bool:
             if len(args) != 1:
-                raise FlowRuntimeError("bool() takes exactly one argument", line=line, column=col, source_code=self.source_code)
-            return self._is_truthy(args[0])
+                raise FlowRuntimeError("bool() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
+            val = args[0]
+            if isinstance(val, str):
+                lower = val.strip().lower()
+                if lower == "true":
+                    return True
+                if lower == "false":
+                    return False
+            return self._is_truthy(val)
 
-        self.globals.define("print", BuiltinFunction("print", builtin_print, expected_arity=None))
-        self.globals.define("say", BuiltinFunction("say", builtin_print, expected_arity=None))
-        self.globals.define("range", BuiltinFunction("range", builtin_range, expected_arity=None))
-        self.globals.define("len", BuiltinFunction("len", builtin_len, expected_arity=1))
-        self.globals.define("abs", BuiltinFunction("abs", builtin_abs, expected_arity=1))
-        self.globals.define("type", BuiltinFunction("type", builtin_type, expected_arity=1))
+        self.globals.define("say", BuiltinFunction("say", builtin_say, expected_arity=None))
+        self.globals.define("pow_", BuiltinFunction("pow_", builtin_pow, expected_arity=2))
+        self.globals.define("input", BuiltinFunction("input", builtin_input, expected_arity=None))
         self.globals.define("int", BuiltinFunction("int", builtin_int, expected_arity=1))
-        self.globals.define("float", BuiltinFunction("float", builtin_float, expected_arity=1))
+        self.globals.define("flt", BuiltinFunction("flt", builtin_flt, expected_arity=1))
         self.globals.define("str", BuiltinFunction("str", builtin_str, expected_arity=1))
+        self.globals.define("char", BuiltinFunction("char", builtin_char, expected_arity=1))
         self.globals.define("bool", BuiltinFunction("bool", builtin_bool, expected_arity=1))
 
     # ------------------ Execution Entry Points ------------------
@@ -161,7 +181,14 @@ class Interpreter:
 
         if isinstance(stmt, VariableDeclaration):
             value = self.evaluate(stmt.initializer)
-            self.environment.set(stmt.name, value)
+            self.environment.define(
+                name=stmt.name,
+                value=value,
+                type_name=stmt.type_name,
+                line=stmt.line,
+                column=stmt.column,
+                source_code=self.source_code,
+            )
             return None
 
         if isinstance(stmt, Block):
@@ -181,20 +208,38 @@ class Interpreter:
                 last_value = self.execute(stmt.body)
             return last_value
 
+        if isinstance(stmt, DoWhileStatement):
+            last_value = self.execute(stmt.body)
+            while self._is_truthy(self.evaluate(stmt.condition)):
+                last_value = self.execute(stmt.body)
+            return last_value
+
         if isinstance(stmt, ForStatement):
-            iterable = self.evaluate(stmt.iterable)
-            if not hasattr(iterable, "__iter__") or isinstance(iterable, (bool, int, float)) or iterable is None:
-                raise FlowRuntimeError(
-                    f"'{self._type_name(iterable)}' object is not iterable",
-                    line=stmt.line,
-                    column=stmt.column,
-                    source_code=self.source_code,
-                )
+            # Auto-declare loop variable in current environment
+            init_val = self.evaluate(stmt.init_expr)
+            self.environment.values[stmt.target] = init_val
+            if stmt.target not in self.environment.types:
+                self.environment.types[stmt.target] = "lit"
+
             last_val = None
-            for item in iterable:
-                self.environment.set(stmt.target, item)
+            while self._is_truthy(self.evaluate(stmt.condition)):
                 last_val = self.execute(stmt.body)
+                self.evaluate(stmt.update)
             return last_val
+
+        if isinstance(stmt, FunctionDeclaration):
+            fn = UserFunction(
+                name=stmt.name,
+                parameters=stmt.parameters,
+                body=stmt.body,
+                closure=self.environment,
+            )
+            self.environment.define(stmt.name, fn, type_name="lit")
+            return None
+
+        if isinstance(stmt, ReturnStatement):
+            val = self.evaluate(stmt.expression) if stmt.expression is not None else None
+            raise ReturnSignal(val)
 
         raise FlowRuntimeError(
             f"Unknown statement type: {type(stmt).__name__}",
@@ -223,11 +268,11 @@ class Interpreter:
         if isinstance(expr, StringLiteral):
             return expr.value
 
+        if isinstance(expr, CharLiteral):
+            return Char(expr.value)
+
         if isinstance(expr, BooleanLiteral):
             return expr.value
-
-        if isinstance(expr, NoneLiteral):
-            return None
 
         if isinstance(expr, Identifier):
             return self.environment.get(expr.name, expr.line, expr.column, self.source_code)
@@ -249,9 +294,6 @@ class Interpreter:
             self.environment.assign(expr.name, value, expr.line, expr.column, self.source_code)
             return value
 
-        if isinstance(expr, AugmentedAssignment):
-            return self._evaluate_augmented_assignment(expr)
-
         if isinstance(expr, CallExpression):
             return self._evaluate_call(expr)
 
@@ -262,60 +304,20 @@ class Interpreter:
             source_code=self.source_code,
         )
 
-    def _evaluate_augmented_assignment(self, expr: AugmentedAssignment) -> Any:
-        current = self.environment.get(expr.name, expr.line, expr.column, self.source_code)
-        val = self.evaluate(expr.value)
-        op = expr.operator
-
-        if op == "+=":
-            if isinstance(current, (int, float)) and not isinstance(current, bool) and \
-               isinstance(val, (int, float)) and not isinstance(val, bool):
-                new_val = current + val
-            elif isinstance(current, str) and isinstance(val, str):
-                new_val = current + val
-            else:
-                raise FlowRuntimeError(
-                    f"Unsupported operand types for +=: '{self._type_name(current)}' and '{self._type_name(val)}'",
-                    line=expr.line,
-                    column=expr.column,
-                    source_code=self.source_code,
-                )
-        elif op in ("-=", "*=", "/="):
-            self._check_number_operands(op, current, val, expr.line, expr.column)
-            if op == "-=":
-                new_val = current - val
-            elif op == "*=":
-                new_val = current * val
-            elif op == "/=":
-                if val == 0:
-                    raise FlowRuntimeError(
-                        "Division by zero",
-                        line=expr.line,
-                        column=expr.column,
-                        source_code=self.source_code,
-                    )
-                res = current / val
-                new_val = int(res) if res.is_integer() and isinstance(current, int) and isinstance(val, int) else res
-        else:
-            raise FlowRuntimeError(f"Unknown augmented assignment operator '{op}'", line=expr.line, column=expr.column, source_code=self.source_code)
-
-        self.environment.assign(expr.name, new_val, expr.line, expr.column, self.source_code)
-        return new_val
-
     def _evaluate_unary(self, expr: UnaryOp) -> Any:
         operand = self.evaluate(expr.operand)
 
         if expr.operator == "-":
             if not isinstance(operand, (int, float)) or isinstance(operand, bool):
                 raise FlowRuntimeError(
-                    f"Operand for unary '-' must be a number, got {self._type_name(operand)}",
+                    f"Operand for unary '-' must be a number, got {get_type_name(operand)}",
                     line=expr.line,
                     column=expr.column,
                     source_code=self.source_code,
                 )
             return -operand
 
-        if expr.operator in ("!", "not"):
+        if expr.operator == "not":
             return not self._is_truthy(operand)
 
         raise FlowRuntimeError(
@@ -350,56 +352,118 @@ class Interpreter:
         right = self.evaluate(expr.right)
         op = expr.operator
 
-        if op == "+":
+        # Division: ALWAYS produces float in FlowLang V1
+        if op == "/":
+            self._check_number_operands(op, left, right, expr.line, expr.column)
+            if right == 0:
+                raise FlowRuntimeError(
+                    "Division by zero",
+                    line=expr.line,
+                    column=expr.column,
+                    source_code=self.source_code,
+                )
+            return float(left / right)
+
+        # Modulo
+        if op == "%":
+            self._check_number_operands(op, left, right, expr.line, expr.column)
+            if right == 0:
+                raise FlowRuntimeError(
+                    "Modulo by zero",
+                    line=expr.line,
+                    column=expr.column,
+                    source_code=self.source_code,
+                )
+            return left % right
+
+        # Subtraction
+        if op == "-":
+            self._check_number_operands(op, left, right, expr.line, expr.column)
+            return left - right
+
+        # Multiplication
+        if op == "*":
+            # Numbers
             if isinstance(left, (int, float)) and not isinstance(left, bool) and \
                isinstance(right, (int, float)) and not isinstance(right, bool):
-                return left + right
-            if isinstance(left, str) and isinstance(right, str):
-                return left + right
+                return left * right
+
+            # String * non-negative integer
+            if isinstance(left, (str, Char)) and isinstance(right, int) and not isinstance(right, bool):
+                if right < 0:
+                    raise FlowRuntimeError(
+                        "String multiplication requires a non-negative integer",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+                text = left.value if isinstance(left, Char) else left
+                return text * right
+
+            # non-negative integer * String (symmetric)
+            if isinstance(right, (str, Char)) and isinstance(left, int) and not isinstance(left, bool):
+                if left < 0:
+                    raise FlowRuntimeError(
+                        "String multiplication requires a non-negative integer",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+                text = right.value if isinstance(right, Char) else right
+                return text * left
+
             raise FlowRuntimeError(
-                f"Operands for '+' must both be numbers or both be strings, got {self._type_name(left)} and {self._type_name(right)}",
+                f"Invalid operands for '*': '{get_type_name(left)}' and '{get_type_name(right)}'",
                 line=expr.line,
                 column=expr.column,
                 source_code=self.source_code,
             )
 
-        if op in ("-", "*", "/", "%"):
-            self._check_number_operands(op, left, right, expr.line, expr.column)
-            if op == "-":
-                return left - right
-            if op == "*":
-                return left * right
-            if op == "/":
-                if right == 0:
-                    raise FlowRuntimeError(
-                        "Division by zero",
-                        line=expr.line,
-                        column=expr.column,
-                        source_code=self.source_code,
-                    )
-                res = left / right
-                return int(res) if res.is_integer() and isinstance(left, int) and isinstance(right, int) else res
-            if op == "%":
-                if right == 0:
-                    raise FlowRuntimeError(
-                        "Modulo by zero",
-                        line=expr.line,
-                        column=expr.column,
-                        source_code=self.source_code,
-                    )
-                return left % right
+        # Addition / Concatenation
+        if op == "+":
+            # Numbers
+            if isinstance(left, (int, float)) and not isinstance(left, bool) and \
+               isinstance(right, (int, float)) and not isinstance(right, bool):
+                return left + right
 
+            # String concatenation (if either operand is string or char)
+            if isinstance(left, (str, Char)) or isinstance(right, (str, Char)):
+                s_left = left.value if isinstance(left, Char) else stringify_value(left)
+                s_right = right.value if isinstance(right, Char) else stringify_value(right)
+                return s_left + s_right
+
+            raise FlowRuntimeError(
+                f"Invalid operands for '+': '{get_type_name(left)}' and '{get_type_name(right)}'",
+                line=expr.line,
+                column=expr.column,
+                source_code=self.source_code,
+            )
+
+        # Relational comparisons
         if op in (">", ">=", "<", "<="):
-            self._check_number_operands(op, left, right, expr.line, expr.column)
-            if op == ">":
-                return left > right
-            if op == ">=":
-                return left >= right
-            if op == "<":
-                return left < right
-            if op == "<=":
-                return left <= right
+            if isinstance(left, (int, float)) and not isinstance(left, bool) and \
+               isinstance(right, (int, float)) and not isinstance(right, bool):
+                if op == ">": return left > right
+                if op == ">=": return left >= right
+                if op == "<": return left < right
+                if op == "<=": return left <= right
 
+            if isinstance(left, (str, Char)) and isinstance(right, (str, Char)):
+                s_left = left.value if isinstance(left, Char) else left
+                s_right = right.value if isinstance(right, Char) else right
+                if op == ">": return s_left > s_right
+                if op == ">=": return s_left >= s_right
+                if op == "<": return s_left < s_right
+                if op == "<=": return s_left <= s_right
+
+            raise FlowRuntimeError(
+                f"Comparison operator '{op}' requires operands of same comparable type, got '{get_type_name(left)}' and '{get_type_name(right)}'",
+                line=expr.line,
+                column=expr.column,
+                source_code=self.source_code,
+            )
+
+        # Equality
         if op == "==":
             return left == right
 
@@ -439,8 +503,8 @@ class Interpreter:
             return value != 0
         if isinstance(value, str):
             return len(value) > 0
-        if isinstance(value, (list, tuple, dict)):
-            return len(value) > 0
+        if isinstance(value, Char):
+            return True
         return True
 
     def _check_number_operands(self, operator: str, left: Any, right: Any, line: int, column: int) -> None:
@@ -448,24 +512,9 @@ class Interpreter:
         right_is_num = isinstance(right, (int, float)) and not isinstance(right, bool)
         if not (left_is_num and right_is_num):
             raise FlowRuntimeError(
-                f"Operands for '{operator}' must be numbers, got {self._type_name(left)} and {self._type_name(right)}",
+                f"Operands for '{operator}' must be numbers, got {get_type_name(left)} and {get_type_name(right)}",
                 line=line,
                 column=column,
                 source_code=self.source_code,
             )
 
-    @staticmethod
-    def _type_name(val: Any) -> str:
-        if val is None:
-            return "None"
-        if isinstance(val, bool):
-            return "bool"
-        if isinstance(val, int):
-            return "int"
-        if isinstance(val, float):
-            return "float"
-        if isinstance(val, str):
-            return "str"
-        if isinstance(val, list):
-            return "list"
-        return type(val).__name__

@@ -1,0 +1,5 @@
+FlowLang ParserError: Expected '{' to start block
+  at line 4, column 5
+
+  4 |     say(1)
+          ^

@@ -1,17 +1,17 @@
-# Augmented Assignments
-x = 10
-x += 5
-print("x += 5:", x)
+# Dynamic and Static Variable Operations
+lit x = 10
+x = x + 5
+say("x + 5:", x)
 
-x -= 3
-print("x -= 3:", x)
+x = x - 3
+say("x - 3:", x)
 
-x *= 2
-print("x *= 2:", x)
+x = x * 2
+say("x * 2:", x)
 
-x /= 4
-print("x /= 4:", x)
+x = x / 4
+say("x / 4:", x)
 
-s = "Hello"
-s += " World"
-print("string +=:", s)
+lit s = "Hello"
+s = s + " World"
+say("string +:", s)

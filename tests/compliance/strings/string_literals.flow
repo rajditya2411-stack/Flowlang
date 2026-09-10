@@ -1,8 +1,8 @@
 # String Literals and Escapes
-s1 = "Hello, FlowLang!"
-s2 = 'Single quoted string'
-print(s1)
-print(s2)
+lit s1 = "Hello, FlowLang!"
+char c = 'A'
+say(s1)
+say(c)
 
-escaped = "Line 1\nLine 2\tTabbed \"Quoted\""
-print(escaped)
+lit escaped = "Line 1\nLine 2\tTabbed \"Quoted\""
+say(escaped)

@@ -1,13 +1,15 @@
 # If / Else Conditionals
-x = 10
+lit x = 10
 
-if x > 5:
-    print("x is greater than 5")
-else:
-    print("x is 5 or less")
+if x > 5 {
+    say("x is greater than 5")
+} else {
+    say("x is 5 or less")
+}
 
-y = 2
-if y > 5:
-    print("y is greater than 5")
-else:
-    print("y is 5 or less")
+lit y = 2
+if y > 5 {
+    say("y is greater than 5")
+} else {
+    say("y is 5 or less")
+}

@@ -1,5 +1,5 @@
-FlowLang RuntimeError: Operands for '+' must both be numbers or both be strings, got int and str
-  at line 2, column 5
+FlowLang RuntimeError: Type mismatch: cannot assign value of type 'str' to variable 'x' declared as 'int'
+  at line 3, column 3
 
-  2 | x = 10 + "hello"
-          ^
+  3 | x = "hello"
+        ^

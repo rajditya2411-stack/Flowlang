@@ -1,12 +1,15 @@
-# For Loops with range()
-# 1-arg range
-for i in range(3):
-    print("step:", i)
+# For Loops in FlowLang V1
+# 1. counting up from 0 to 2
+for i in (0; i < 3; i = i + 1) {
+    say("step:", i)
+}
 
-# 2-arg range
-for i in range(2, 5):
-    print("range(2,5):", i)
+# 2. counting from 2 to 4
+for i in (2; i <= 4; i = i + 1) {
+    say("range(2,5):", i)
+}
 
-# 3-arg countdown range
-for i in range(5, 0, -1):
-    print("countdown:", i)
+# 3. countdown from 5 down to 1
+for i in (5; i >= 1; i = i - 1) {
+    say("countdown:", i)
+}

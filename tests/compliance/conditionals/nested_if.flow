@@ -1,12 +1,14 @@
 # Nested If Statements
-x = 10
-y = 20
+lit x = 10
+lit y = 20
 
-if x > 0:
-    print("x is positive")
-    if y > 0:
-        print("y is also positive")
-    else:
-        print("y is not positive")
-else:
-    print("x is not positive")
+if x > 0 {
+    say("x is positive")
+    if y > 0 {
+        say("y is also positive")
+    } else {
+        say("y is not positive")
+    }
+} else {
+    say("x is not positive")
+}

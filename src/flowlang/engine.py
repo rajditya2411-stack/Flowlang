@@ -6,7 +6,7 @@ Decoupled for use by CLI, REPL, tests, and future Playground API.
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from flowlang.lexer import Lexer
 from flowlang.parser import Parser
 from flowlang.interpreter import Interpreter
@@ -23,7 +23,11 @@ class ExecutionResult:
     formatted_error: Optional[str] = None
 
 
-def execute(source_code: str, environment: Optional[Environment] = None) -> ExecutionResult:
+def execute(
+    source_code: str,
+    environment: Optional[Environment] = None,
+    input_handler: Optional[Callable[[str], str]] = None,
+) -> ExecutionResult:
     """Execute FlowLang source code and return a structured ExecutionResult."""
     output_lines: list[str] = []
 
@@ -43,6 +47,7 @@ def execute(source_code: str, environment: Optional[Environment] = None) -> Exec
         interpreter = Interpreter(
             globals_env=environment,
             output_handler=capture_output,
+            input_handler=input_handler,
             source_code=source_code,
         )
         result_value = interpreter.interpret(program)

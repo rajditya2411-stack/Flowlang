@@ -1,0 +1,2 @@
+# Runtime Error: String Multiplication Requires Non-Negative Integer
+lit s = "hello" * -1

@@ -1,5 +1,0 @@
-FlowLang RuntimeError: 'int' object is not iterable
-  at line 2, column 1
-
-  2 | for x in 123:
-      ^

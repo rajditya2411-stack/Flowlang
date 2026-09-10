@@ -5,77 +5,91 @@
 
 const EXAMPLES = {
   calculator: `# Calculator & Variables
-a = 4
-b = 4
-print("a =", a)
-print("b =", b)
-print("a + b =", a + b)`,
+int a = 4
+int b = 4
+say("a =", a)
+say("b =", b)
+say("a + b =", a + b)`,
 
   hello: `# Hello World & Strings
-greeting = "Hello, world from"
-language = "FlowLang"
-print(greeting, language)`,
+str greeting = "Hello, world from"
+str language = "FlowLang"
+say(greeting, language)`,
 
   arithmetic: `# Arithmetic Precedence & Conditionals
-a = 10
-b = 20
-result = (a + b) * 2 - 10 / 2
-print("Result is:", result)
+int a = 10
+int b = 20
+flt result = (a + b) * 2 - 10 / 2
+say("Result is:", result)
 
-if result > 50:
-    print("Result is greater than 50!")
-else:
-    print("Result is 50 or less.")`,
+if result > 50 {
+    say("Result is greater than 50!")
+} else {
+    say("Result is 50 or less.")
+}`,
 
   conditionals: `# If / Elif / Else Statements
-score = 85
+int score = 85
+str grade = ""
 
-if score >= 90:
+if score >= 90 {
     grade = "A"
-elif score >= 80:
+} elif score >= 80 {
     grade = "B"
-elif score >= 70:
+} elif score >= 70 {
     grade = "C"
-else:
+} else {
     grade = "F"
+}
 
-print("Score:", score, "-> Grade:", grade)`,
+say("Score:", score, "-> Grade:", grade)`,
 
-  while_loop: `# While Loop Counter & Countdown
-i = 5
-while i > 0:
-    print("Countdown:", i)
-    i -= 1
+  loops: `# Loops: for, while, do-while
+say("--- For Loop ---")
+for i in (0; i < 4; i = i + 1) {
+    say("i =", i)
+}
 
-print("Blast off!")`,
+say("--- While Loop ---")
+int w = 3
+while w > 0 {
+    say("w =", w)
+    w = w - 1
+}
 
-  for_loop: `# For Loop with range() and sequences
-print("--- Counting up with range(5) ---")
-for i in range(5):
-    print("Step:", i)
+say("--- Do-While Loop ---")
+int d = 0
+do {
+    say("d =", d)
+    d = d + 1
+} while d < 2`,
 
-print("\\n--- Counting down with range(5, 0, -1) ---")
-for count in range(5, 0, -1):
-    print("Launch in:", count)
+  functions: `# Functions (dfn / return)
+dfn add(int x, int y) {
+    return x + y
+}
 
-print("\\n--- Iterating over text ---")
-for char in "FlowLang":
-    print("Letter:", char)`,
+dfn greet(str name) {
+    say("Hello,", name)
+}
+
+greet("FlowLang User")
+say("3 + 7 =", add(3, 7))`,
 
   logic: `# Logical Operators (and / or / not)
-x = 10
-y = 20
+int x = 10
+int y = 20
 
-is_valid = x > 0 and y < 50
-print("Is valid?", is_valid)
+bool is_valid = x > 0 and y < 50
+say("Is valid?", is_valid)
 
-is_special = not (x == 10) or y == 20
-print("Is special?", is_special)`,
+bool is_special = not (x == 10) or y == 20
+say("Is special?", is_special)`,
 
   error_demo: `# Visual Error Pointer Demo
-username = "Raj"
-print("Hello", username)
-print(missing_var)`
+str username = "Raj"
+say("Hello", username)
+say(missing_var)`
 };
 
 // DOM Elements
