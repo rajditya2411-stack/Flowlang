@@ -291,20 +291,11 @@ class TestV2Dict(unittest.TestCase):
         self.assertEqual(lines[0], "raj 18")
         self.assertEqual(lines[1], "rajditya 18")
 
-    def test_dict_remove(self):
-        code = """
-        dict user = << "name": "raj", "age": 18 >>
-        remove_(user, "age")
-        say(len_(user))
-        """
-        res = execute(code)
-        self.assertIsNone(res.error)
-        self.assertEqual(res.output.strip(), "1")
-
-        # Removing missing key raises error
-        res2 = execute("dict user = << >>\nremove_(user, \"age\")")
-        self.assertIsNotNone(res2.error)
-        self.assertIn("KeyError", res2.error["message"])
+    def test_dict_remove_deprecated(self):
+        # remove_() is permanently dropped in V2 Standard Library
+        res = execute("dict user = << \"name\": \"raj\", \"age\": 18 >>\nremove_(user, \"age\")")
+        self.assertIsNotNone(res.error)
+        self.assertIn("Undefined variable 'remove_'", res.error["message"])
 
     def test_dict_copy_semantics(self):
         code = """

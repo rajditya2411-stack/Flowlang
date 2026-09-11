@@ -26,11 +26,7 @@ say("Converted to mutable list:", editable)
 
 # 3. Dictionaries (Mutable Ordered Key-Value Collections)
 say("=== DICT DEMO ===")
-dict user = <<
-    "name": "Raj",
-    "role": "Creator",
-    "version": 2
->>
+dict user = << "name": "Raj", "role": "Creator", "version": 2 >>
 user["active"] = "yes"
 say("User name:", user["name"])
 say("Dict length:", len_(user))

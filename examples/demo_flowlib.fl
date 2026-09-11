@@ -1,0 +1,39 @@
+// Demo of FlowLang V2 First Standard Library (FlowLib)
+import flowlib
+
+say("=== 1. Collection Sorting & Reversal ===")
+list nums = [50, 10, 40, 20, 30]
+say("Original nums:", nums)
+
+asort_(nums)
+say("Ascending sorted:", nums)
+
+dsort_(nums)
+say("Descending sorted:", nums)
+
+rev_(nums)
+say("Reversed:", nums)
+
+say("=== 2. Aggregations & Slicing ===")
+say("Min:", min_(nums), "| Max:", max_(nums))
+say("Sum all:", sum_(nums))
+say("Sum range [1, 3]:", sum_(nums; 1; 3))
+
+say("=== 3. Dictionary & Deletion Idioms ===")
+dict user = << "name": "FlowLang", "status": "active", "version": 2 >>
+say("Initial dict:", user)
+pop_(user; "status")
+say("After pop('status'):", user)
+say("Safe get present:", get_(user; "name"))
+say("Safe get missing with default:", get_(user; "missing"; "not_found"))
+
+say("=== 4. String Transformations ===")
+str phrase = "  flowlang standard library is ready  "
+say("Stripped & Titled:", title_(strip_(phrase)))
+
+list words = split_(phrase)
+say("Words list:", words)
+say("Rejoined with '|':", join_(words; " | "))
+say("Starts with '  flow':", startswith_(phrase; "  flow"))
+say("Ends with 'ready  ':", endswith_(phrase; "ready  "))
+say("Replaced 'ready' with 'awesome':", replace_(phrase; "ready"; "awesome"))

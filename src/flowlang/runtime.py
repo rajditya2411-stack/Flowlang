@@ -477,5 +477,5 @@ def stringify_value(value: Any) -> str:
         items = ", ".join(f"{stringify_element(k)}: {stringify_element(v)}" for k, v in value.items())
         return f"<< {items} >>"
     if value is None:
-        return ""
+        return "none"
     return str(value)

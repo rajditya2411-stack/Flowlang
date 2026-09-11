@@ -284,6 +284,14 @@ class ReturnStatement(Statement):
 
 
 @dataclass
+class ImportStatement(Statement):
+    module_name: str
+
+    def __repr__(self) -> str:
+        return f"Import({self.module_name})"
+
+
+@dataclass
 class Program(ASTNode):
     statements: list[Statement]
 

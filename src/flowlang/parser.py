@@ -22,6 +22,7 @@ from flowlang.ast import (
     ForInStatement,
     FunctionDeclaration,
     ReturnStatement,
+    ImportStatement,
     Assignment,
     BinaryOp,
     LogicalOp,
@@ -49,6 +50,7 @@ class Parser:
         self.tokens = tokens
         self.source_code = source_code
         self.pos = 0
+        self._in_for_in_iterable = False
 
     # ------------------ Token Navigation Helpers ------------------
 
@@ -144,6 +146,10 @@ class Parser:
         if self._check(TokenType.RETURN):
             self._advance()
             return self._return_statement()
+
+        if self._check(TokenType.IMPORT):
+            self._advance()
+            return self._import_statement()
 
         # Variable declarations: lit / int / flt / str / char / bool / list / brack / dict <id> = <expr>
         type_tokens = (
@@ -313,7 +319,11 @@ class Parser:
 
         # V2 Collection iteration: for i in iterable or for i in iterable(start; end; step)
         self._skip_newlines()
-        iterable = self._expression()
+        self._in_for_in_iterable = True
+        try:
+            iterable = self._expression()
+        finally:
+            self._in_for_in_iterable = False
         self._skip_newlines()
 
         range_args: Optional[list[Expression]] = None
@@ -388,6 +398,17 @@ class Parser:
             line=ret_tok.line,
             column=ret_tok.column,
             expression=value,
+        )
+
+    def _import_statement(self) -> ImportStatement:
+        """import_statement -> 'import' IDENTIFIER ( ';' | '\\n' )?"""
+        import_tok = self._previous()
+        name_tok = self._consume(TokenType.IDENTIFIER, "Expected module name after 'import'")
+        self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
+        return ImportStatement(
+            line=import_tok.line,
+            column=import_tok.column,
+            module_name=name_tok.value,
         )
 
     def _expression_statement(self) -> ExpressionStatement:
@@ -571,7 +592,7 @@ class Parser:
 
         while True:
             if self._check(TokenType.LPAREN):
-                if self._has_semicolon_in_parens():
+                if self._in_for_in_iterable and self._has_semicolon_in_parens():
                     break
                 self._advance()
                 expr = self._finish_call(expr)
@@ -602,7 +623,7 @@ class Parser:
         return expr
 
     def _finish_call(self, callee: Expression) -> CallExpression:
-        """Parse argument list for function call: ( arg1, arg2, ... )"""
+        """Parse argument list for function call: ( arg1, arg2, ... ) or ( arg1; arg2; ... )"""
         args: list[Expression] = []
 
         self._skip_newlines()
@@ -611,7 +632,7 @@ class Parser:
                 self._skip_newlines()
                 args.append(self._expression())
                 self._skip_newlines()
-                if not self._match(TokenType.COMMA):
+                if not (self._match(TokenType.COMMA) or self._match(TokenType.SEMICOLON)):
                     break
 
         paren = self._consume(TokenType.RPAREN, "Expected ')' after arguments")

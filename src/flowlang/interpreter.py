@@ -20,6 +20,7 @@ from flowlang.ast import (
     ForInStatement,
     FunctionDeclaration,
     ReturnStatement,
+    ImportStatement,
     Assignment,
     BinaryOp,
     LogicalOp,
@@ -56,6 +57,11 @@ from flowlang.runtime import (
     get_type_name,
 )
 from flowlang.errors import FlowRuntimeError
+from flowlang.flowlib import FLOWLIB_FUNCTIONS
+
+STDLIB_MODULES: dict[str, dict[str, BuiltinFunction]] = {
+    "flowlib": FLOWLIB_FUNCTIONS,
+}
 
 
 class Interpreter:
@@ -191,18 +197,6 @@ class Interpreter:
             lst.append(item)
             return None
 
-        # remove_(dict, key)
-        def builtin_remove(interpreter: Any, args: list[Any], line: int, col: int) -> None:
-            if len(args) != 2:
-                raise FlowRuntimeError(f"remove_() takes exactly 2 arguments, got {len(args)}", line=line, column=col, source_code=self.source_code)
-            d, key = args[0], args[1]
-            if not isinstance(d, (FlowDict, dict)):
-                raise FlowRuntimeError(f"remove_() requires a dict, got '{get_type_name(d)}'", line=line, column=col, source_code=self.source_code)
-            if key not in d:
-                raise FlowRuntimeError(f"KeyError: key {stringify_value(key)} not found in dictionary", line=line, column=col, source_code=self.source_code)
-            del d[key]
-            return None
-
         # listb_(brack)
         def builtin_listb(interpreter: Any, args: list[Any], line: int, col: int) -> list:
             if len(args) != 1:
@@ -237,7 +231,6 @@ class Interpreter:
         self.globals.define("bool", BuiltinFunction("bool", builtin_bool, expected_arity=1))
         self.globals.define("len_", BuiltinFunction("len_", builtin_len, expected_arity=1))
         self.globals.define("append_", BuiltinFunction("append_", builtin_append, expected_arity=2))
-        self.globals.define("remove_", BuiltinFunction("remove_", builtin_remove, expected_arity=2))
         self.globals.define("listb_", BuiltinFunction("listb_", builtin_listb, expected_arity=1))
         self.globals.define("freeze_", BuiltinFunction("freeze_", builtin_freeze, expected_arity=1))
         self.globals.define("bk", BuiltinFunction("bk", builtin_bk, expected_arity=1))
@@ -378,6 +371,19 @@ class Interpreter:
         if isinstance(stmt, ReturnStatement):
             val = self.evaluate(stmt.expression) if stmt.expression is not None else None
             raise ReturnSignal(val)
+
+        if isinstance(stmt, ImportStatement):
+            module_name = stmt.module_name
+            if module_name not in STDLIB_MODULES:
+                raise FlowRuntimeError(
+                    f"Module '{module_name}' not found",
+                    line=stmt.line,
+                    column=stmt.column,
+                    source_code=self.source_code,
+                )
+            for fn_name, fn_obj in STDLIB_MODULES[module_name].items():
+                self.globals.define(fn_name, fn_obj)
+            return None
 
         raise FlowRuntimeError(
             f"Unknown statement type: {type(stmt).__name__}",

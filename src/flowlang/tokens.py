@@ -45,6 +45,9 @@ class TokenType(Enum):
     DFN = auto()            # dfn
     RETURN = auto()         # return
 
+    # Module Keywords
+    IMPORT = auto()         # import
+
     # Output Keyword / Identifier
     SAY = auto()            # say
 
@@ -110,6 +113,7 @@ KEYWORDS: dict[str, TokenType] = {
     "in": TokenType.IN,
     "dfn": TokenType.DFN,
     "return": TokenType.RETURN,
+    "import": TokenType.IMPORT,
     "say": TokenType.SAY,
     "and": TokenType.AND,
     "or": TokenType.OR,
