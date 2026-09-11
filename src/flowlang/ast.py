@@ -119,6 +119,61 @@ class CallExpression(Expression):
         return f"Call({self.callee}({args}))"
 
 
+@dataclass
+class ListLiteral(Expression):
+    elements: list[Expression]
+
+    def __repr__(self) -> str:
+        elems = ", ".join(repr(e) for e in self.elements)
+        return f"List([{elems}])"
+
+
+@dataclass
+class BrackLiteral(Expression):
+    elements: list[Expression]
+
+    def __repr__(self) -> str:
+        elems = ", ".join(repr(e) for e in self.elements)
+        return f"Brack(({elems}))"
+
+
+@dataclass
+class DictLiteral(Expression):
+    entries: list[tuple[Expression, Expression]]
+
+    def __repr__(self) -> str:
+        items = ", ".join(f"{k}: {v}" for k, v in self.entries)
+        return f"Dict(<< {items} >>)"
+
+
+@dataclass
+class IndexAccess(Expression):
+    target: Expression
+    index: Expression
+
+    def __repr__(self) -> str:
+        return f"IndexAccess({self.target}[{self.index}])"
+
+
+@dataclass
+class IndexAssignment(Expression):
+    target: Expression
+    index: Expression
+    value: Expression
+
+    def __repr__(self) -> str:
+        return f"IndexAssign({self.target}[{self.index}] = {self.value})"
+
+
+@dataclass
+class MemberAccess(Expression):
+    target: Expression
+    member: str
+
+    def __repr__(self) -> str:
+        return f"MemberAccess({self.target}.{self.member})"
+
+
 # ==================== Statements ====================
 
 @dataclass
@@ -193,6 +248,20 @@ class ForStatement(Statement):
 
     def __repr__(self) -> str:
         return f"For({self.target} in ({self.init_expr}; {self.condition}; {self.update}), body={self.body})"
+
+
+@dataclass
+class ForInStatement(Statement):
+    target: str
+    iterable: Expression
+    range_args: Optional[list[Expression]]
+    body: Statement
+
+    def __repr__(self) -> str:
+        if self.range_args is not None:
+            r = "; ".join(repr(a) for a in self.range_args)
+            return f"ForIn({self.target} in {self.iterable}({r}), body={self.body})"
+        return f"ForIn({self.target} in {self.iterable}, body={self.body})"
 
 
 @dataclass

@@ -19,6 +19,7 @@ from flowlang.ast import (
     WhileStatement,
     DoWhileStatement,
     ForStatement,
+    ForInStatement,
     FunctionDeclaration,
     ReturnStatement,
     Assignment,
@@ -27,6 +28,12 @@ from flowlang.ast import (
     UnaryOp,
     Grouping,
     CallExpression,
+    ListLiteral,
+    BrackLiteral,
+    DictLiteral,
+    IndexAccess,
+    IndexAssignment,
+    MemberAccess,
     NumberLiteral,
     StringLiteral,
     CharLiteral,
@@ -138,7 +145,7 @@ class Parser:
             self._advance()
             return self._return_statement()
 
-        # Variable declarations: lit / int / flt / str / char / bool <id> = <expr>
+        # Variable declarations: lit / int / flt / str / char / bool / list / brack / dict <id> = <expr>
         type_tokens = (
             TokenType.LIT,
             TokenType.INT,
@@ -146,6 +153,9 @@ class Parser:
             TokenType.STR,
             TokenType.CHAR_TYPE,
             TokenType.BOOL_TYPE,
+            TokenType.LIST,
+            TokenType.BRACK,
+            TokenType.DICT,
         )
         if self._check_any(*type_tokens) and self._peek(1).type == TokenType.IDENTIFIER:
             return self._var_declaration()
@@ -245,36 +255,94 @@ class Parser:
             condition=condition,
         )
 
-    def _for_statement(self) -> ForStatement:
-        """for_statement -> 'for' IDENTIFIER 'in' '(' init_expr ';' cond_expr ';' update_expr ')' block"""
+    def _has_semicolon_in_parens(self) -> bool:
+        """Check if upcoming parenthesized clause contains semicolons (for header or range)."""
+        if not self._check(TokenType.LPAREN):
+            return False
+        depth = 0
+        i = 0
+        while True:
+            tok = self._peek(i)
+            if tok.type == TokenType.EOF:
+                break
+            if tok.type == TokenType.LPAREN:
+                depth += 1
+            elif tok.type == TokenType.RPAREN:
+                depth -= 1
+                if depth == 0:
+                    break
+            elif tok.type == TokenType.SEMICOLON and depth == 1:
+                return True
+            i += 1
+        return False
+
+    def _for_statement(self) -> Statement:
+        """for_statement -> V1 C-style loop or V2 collection/ranged loop"""
         for_tok = self._previous()
         target_tok = self._consume(TokenType.IDENTIFIER, "Expected variable name after 'for'")
         self._consume(TokenType.IN, "Expected 'in' after for loop variable")
-        self._consume(TokenType.LPAREN, "Expected '(' after 'in'")
+
+        if self._has_semicolon_in_parens():
+            self._consume(TokenType.LPAREN, "Expected '(' after 'in'")
+            self._skip_newlines()
+
+            init_expr = self._expression()
+            self._consume(TokenType.SEMICOLON, "Expected ';' after for loop initialization")
+            self._skip_newlines()
+
+            cond_expr = self._expression()
+            self._consume(TokenType.SEMICOLON, "Expected ';' after for loop condition")
+            self._skip_newlines()
+
+            update_expr = self._expression()
+            self._skip_newlines()
+            self._consume(TokenType.RPAREN, "Expected ')' after for loop header")
+            self._skip_newlines()
+
+            body = self._block()
+
+            return ForStatement(
+                line=for_tok.line,
+                column=for_tok.column,
+                target=target_tok.value,
+                init_expr=init_expr,
+                condition=cond_expr,
+                update=update_expr,
+                body=body,
+            )
+
+        # V2 Collection iteration: for i in iterable or for i in iterable(start; end; step)
+        self._skip_newlines()
+        iterable = self._expression()
         self._skip_newlines()
 
-        init_expr = self._expression()
-        self._consume(TokenType.SEMICOLON, "Expected ';' after for loop initialization")
-        self._skip_newlines()
+        range_args: Optional[list[Expression]] = None
+        if self._match(TokenType.LPAREN):
+            self._skip_newlines()
+            start_expr = self._expression()
+            self._consume(TokenType.SEMICOLON, "Expected ';' after range start")
+            self._skip_newlines()
+            end_expr = self._expression()
+            self._skip_newlines()
+            step_expr: Optional[Expression] = None
+            if self._match(TokenType.SEMICOLON):
+                self._skip_newlines()
+                step_expr = self._expression()
+                self._skip_newlines()
+            self._consume(TokenType.RPAREN, "Expected ')' after range arguments")
+            range_args = [start_expr, end_expr]
+            if step_expr is not None:
+                range_args.append(step_expr)
 
-        cond_expr = self._expression()
-        self._consume(TokenType.SEMICOLON, "Expected ';' after for loop condition")
         self._skip_newlines()
-
-        update_expr = self._expression()
-        self._skip_newlines()
-        self._consume(TokenType.RPAREN, "Expected ')' after for loop header")
-        self._skip_newlines()
-
         body = self._block()
 
-        return ForStatement(
+        return ForInStatement(
             line=for_tok.line,
             column=for_tok.column,
             target=target_tok.value,
-            init_expr=init_expr,
-            condition=cond_expr,
-            update=update_expr,
+            iterable=iterable,
+            range_args=range_args,
             body=body,
         )
 
@@ -350,6 +418,15 @@ class Parser:
                     line=equals.line,
                     column=equals.column,
                     name=expr.name,
+                    value=value,
+                )
+
+            if isinstance(expr, IndexAccess):
+                return IndexAssignment(
+                    line=equals.line,
+                    column=equals.column,
+                    target=expr.target,
+                    index=expr.index,
                     value=value,
                 )
 
@@ -489,12 +566,36 @@ class Parser:
         return self._call()
 
     def _call(self) -> Expression:
-        """call -> primary ( '(' arguments? ')' )*"""
+        """call -> primary ( '(' arguments? ')' | '[' index ']' | '.' IDENTIFIER )*"""
         expr = self._primary()
 
         while True:
-            if self._match(TokenType.LPAREN):
+            if self._check(TokenType.LPAREN):
+                if self._has_semicolon_in_parens():
+                    break
+                self._advance()
                 expr = self._finish_call(expr)
+            elif self._match(TokenType.LBRACKET):
+                bracket = self._previous()
+                self._skip_newlines()
+                index_expr = self._expression()
+                self._skip_newlines()
+                self._consume(TokenType.RBRACKET, "Expected ']' after index")
+                expr = IndexAccess(
+                    line=bracket.line,
+                    column=bracket.column,
+                    target=expr,
+                    index=index_expr,
+                )
+            elif self._match(TokenType.DOT):
+                dot = self._previous()
+                member_tok = self._consume(TokenType.IDENTIFIER, "Expected member name after '.'")
+                expr = MemberAccess(
+                    line=dot.line,
+                    column=dot.column,
+                    target=expr,
+                    member=member_tok.value,
+                )
             else:
                 break
 
@@ -522,7 +623,7 @@ class Parser:
         )
 
     def _primary(self) -> Expression:
-        """primary -> NUMBER | STRING | CHAR | TRUE | FALSE | IDENTIFIER | type/say identifier | '(' expression ')'"""
+        """primary -> NUMBER | STRING | CHAR | TRUE | FALSE | IDENTIFIER | type/say identifier | list/dict/brack | '(' expression ')'"""
         if self._match(TokenType.NUMBER):
             tok = self._previous()
             return NumberLiteral(line=tok.line, column=tok.column, value=tok.value)
@@ -548,17 +649,75 @@ class Parser:
             tok = self._previous()
             return Identifier(line=tok.line, column=tok.column, name="say")
 
-        # Allow type names as conversion function callee identifiers e.g. int(input()), flt(input())
-        if self._match(TokenType.INT, TokenType.FLT, TokenType.STR, TokenType.CHAR_TYPE, TokenType.BOOL_TYPE):
+        # Allow type names as conversion function callee identifiers e.g. int(input()), flt(input()), bk(input())
+        if self._match(TokenType.INT, TokenType.FLT, TokenType.STR, TokenType.CHAR_TYPE, TokenType.BOOL_TYPE, TokenType.LIST, TokenType.BRACK, TokenType.DICT):
             tok = self._previous()
             name = "char" if tok.type == TokenType.CHAR_TYPE else ("bool" if tok.type == TokenType.BOOL_TYPE else tok.value)
             return Identifier(line=tok.line, column=tok.column, name=name)
 
+        # List literal: [ e1, e2, ... ]
+        if self._match(TokenType.LBRACKET):
+            lbracket = self._previous()
+            elements: list[Expression] = []
+            self._skip_newlines()
+            if not self._check(TokenType.RBRACKET):
+                while True:
+                    self._skip_newlines()
+                    elements.append(self._expression())
+                    self._skip_newlines()
+                    if not self._match(TokenType.COMMA):
+                        break
+                    self._skip_newlines()
+            self._consume(TokenType.RBRACKET, "Expected ']' after list elements")
+            return ListLiteral(line=lbracket.line, column=lbracket.column, elements=elements)
+
+        # Dict literal: << k1: v1, k2: v2, ... >>
+        if self._match(TokenType.LDICT):
+            ldict = self._previous()
+            entries: list[tuple[Expression, Expression]] = []
+            self._skip_newlines()
+            if not self._check(TokenType.RDICT):
+                while True:
+                    self._skip_newlines()
+                    key_expr = self._expression()
+                    self._skip_newlines()
+                    self._consume(TokenType.COLON, "Expected ':' after dictionary key")
+                    self._skip_newlines()
+                    val_expr = self._expression()
+                    entries.append((key_expr, val_expr))
+                    self._skip_newlines()
+                    if not self._match(TokenType.COMMA):
+                        break
+                    self._skip_newlines()
+            self._consume(TokenType.RDICT, "Expected '>>' after dictionary entries")
+            return DictLiteral(line=ldict.line, column=ldict.column, entries=entries)
+
+        # Parenthesized: empty brack (), brack literal (1, 2, ...), or grouping (expr)
         if self._match(TokenType.LPAREN):
             lparen = self._previous()
-            expr = self._expression()
+            self._skip_newlines()
+            # Empty brack: ()
+            if self._match(TokenType.RPAREN):
+                return BrackLiteral(line=lparen.line, column=lparen.column, elements=[])
+
+            first = self._expression()
+            self._skip_newlines()
+            if self._match(TokenType.COMMA):
+                elements = [first]
+                self._skip_newlines()
+                if not self._check(TokenType.RPAREN):
+                    while True:
+                        self._skip_newlines()
+                        elements.append(self._expression())
+                        self._skip_newlines()
+                        if not self._match(TokenType.COMMA):
+                            break
+                        self._skip_newlines()
+                self._consume(TokenType.RPAREN, "Expected ')' after brack elements")
+                return BrackLiteral(line=lparen.line, column=lparen.column, elements=elements)
+
             self._consume(TokenType.RPAREN, "Expected ')' after expression")
-            return Grouping(line=lparen.line, column=lparen.column, expression=expr)
+            return Grouping(line=lparen.line, column=lparen.column, expression=first)
 
         current = self._peek()
         raise ParserError(

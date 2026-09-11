@@ -17,6 +17,7 @@ from flowlang.ast import (
     WhileStatement,
     DoWhileStatement,
     ForStatement,
+    ForInStatement,
     FunctionDeclaration,
     ReturnStatement,
     Assignment,
@@ -25,6 +26,12 @@ from flowlang.ast import (
     UnaryOp,
     Grouping,
     CallExpression,
+    ListLiteral,
+    BrackLiteral,
+    DictLiteral,
+    IndexAccess,
+    IndexAssignment,
+    MemberAccess,
     NumberLiteral,
     StringLiteral,
     CharLiteral,
@@ -38,6 +45,13 @@ from flowlang.runtime import (
     UserFunction,
     ReturnSignal,
     Char,
+    Brack,
+    FlowDict,
+    DictKeysView,
+    DictValuesView,
+    validate_dict_key,
+    make_independent_copy,
+    parse_bk_input,
     stringify_value,
     get_type_name,
 )
@@ -158,6 +172,61 @@ class Interpreter:
                     return False
             return self._is_truthy(val)
 
+        # len_(collection)
+        def builtin_len(interpreter: Any, args: list[Any], line: int, col: int) -> int:
+            if len(args) != 1:
+                raise FlowRuntimeError("len_() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
+            val = args[0]
+            if isinstance(val, (list, Brack, tuple, FlowDict, dict, str)):
+                return len(val)
+            raise FlowRuntimeError(f"len_() not supported for type '{get_type_name(val)}'", line=line, column=col, source_code=self.source_code)
+
+        # append_(list, value)
+        def builtin_append(interpreter: Any, args: list[Any], line: int, col: int) -> None:
+            if len(args) != 2:
+                raise FlowRuntimeError(f"append_() takes exactly 2 arguments, got {len(args)}", line=line, column=col, source_code=self.source_code)
+            lst, item = args[0], args[1]
+            if not isinstance(lst, list):
+                raise FlowRuntimeError(f"append_() requires a mutable list, got '{get_type_name(lst)}'", line=line, column=col, source_code=self.source_code)
+            lst.append(item)
+            return None
+
+        # remove_(dict, key)
+        def builtin_remove(interpreter: Any, args: list[Any], line: int, col: int) -> None:
+            if len(args) != 2:
+                raise FlowRuntimeError(f"remove_() takes exactly 2 arguments, got {len(args)}", line=line, column=col, source_code=self.source_code)
+            d, key = args[0], args[1]
+            if not isinstance(d, (FlowDict, dict)):
+                raise FlowRuntimeError(f"remove_() requires a dict, got '{get_type_name(d)}'", line=line, column=col, source_code=self.source_code)
+            if key not in d:
+                raise FlowRuntimeError(f"KeyError: key {stringify_value(key)} not found in dictionary", line=line, column=col, source_code=self.source_code)
+            del d[key]
+            return None
+
+        # listb_(brack)
+        def builtin_listb(interpreter: Any, args: list[Any], line: int, col: int) -> list:
+            if len(args) != 1:
+                raise FlowRuntimeError("listb_() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
+            val = args[0]
+            if isinstance(val, (Brack, tuple, list)):
+                return list(val)
+            raise FlowRuntimeError(f"listb_() expected brack or list, got '{get_type_name(val)}'", line=line, column=col, source_code=self.source_code)
+
+        # freeze_(list)
+        def builtin_freeze(interpreter: Any, args: list[Any], line: int, col: int) -> Brack:
+            if len(args) != 1:
+                raise FlowRuntimeError("freeze_() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
+            val = args[0]
+            if isinstance(val, (list, Brack, tuple)):
+                return Brack(val)
+            raise FlowRuntimeError(f"freeze_() expected list or brack, got '{get_type_name(val)}'", line=line, column=col, source_code=self.source_code)
+
+        # bk(input) - collection input parser
+        def builtin_bk(interpreter: Any, args: list[Any], line: int, col: int) -> Brack:
+            if len(args) != 1:
+                raise FlowRuntimeError("bk() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
+            return parse_bk_input(args[0], line=line, col=col, source_code=self.source_code)
+
         self.globals.define("say", BuiltinFunction("say", builtin_say, expected_arity=None))
         self.globals.define("pow_", BuiltinFunction("pow_", builtin_pow, expected_arity=2))
         self.globals.define("input", BuiltinFunction("input", builtin_input, expected_arity=None))
@@ -166,6 +235,12 @@ class Interpreter:
         self.globals.define("str", BuiltinFunction("str", builtin_str, expected_arity=1))
         self.globals.define("char", BuiltinFunction("char", builtin_char, expected_arity=1))
         self.globals.define("bool", BuiltinFunction("bool", builtin_bool, expected_arity=1))
+        self.globals.define("len_", BuiltinFunction("len_", builtin_len, expected_arity=1))
+        self.globals.define("append_", BuiltinFunction("append_", builtin_append, expected_arity=2))
+        self.globals.define("remove_", BuiltinFunction("remove_", builtin_remove, expected_arity=2))
+        self.globals.define("listb_", BuiltinFunction("listb_", builtin_listb, expected_arity=1))
+        self.globals.define("freeze_", BuiltinFunction("freeze_", builtin_freeze, expected_arity=1))
+        self.globals.define("bk", BuiltinFunction("bk", builtin_bk, expected_arity=1))
 
     # ------------------ Execution Entry Points ------------------
 
@@ -227,6 +302,69 @@ class Interpreter:
                 self.evaluate(stmt.update)
             return last_val
 
+        if isinstance(stmt, ForInStatement):
+            col = self.evaluate(stmt.iterable)
+            if isinstance(col, (list, Brack, tuple)):
+                items = list(col)
+            elif isinstance(col, (FlowDict, dict)):
+                items = [Brack((k, v)) for k, v in col.items()]
+            elif isinstance(col, (DictKeysView, DictValuesView)):
+                items = list(col)
+            else:
+                raise FlowRuntimeError(
+                    f"Type '{get_type_name(col)}' is not iterable",
+                    line=stmt.line,
+                    column=stmt.column,
+                    source_code=self.source_code,
+                )
+
+            if stmt.range_args is not None:
+                start_val = self.evaluate(stmt.range_args[0])
+                end_val = self.evaluate(stmt.range_args[1])
+                step_val = self.evaluate(stmt.range_args[2]) if len(stmt.range_args) > 2 else 1
+
+                if not isinstance(start_val, int) or isinstance(start_val, bool) or \
+                   not isinstance(end_val, int) or isinstance(end_val, bool) or \
+                   not isinstance(step_val, int) or isinstance(step_val, bool):
+                    raise FlowRuntimeError(
+                        "Range arguments must be integers",
+                        line=stmt.line,
+                        column=stmt.column,
+                        source_code=self.source_code,
+                    )
+
+                if step_val == 0:
+                    raise FlowRuntimeError(
+                        "Range step cannot be zero",
+                        line=stmt.line,
+                        column=stmt.column,
+                        source_code=self.source_code,
+                    )
+
+                n = len(items)
+                def resolve_pos(p: int) -> int:
+                    return n + p if p < 0 else p
+
+                start_idx = resolve_pos(start_val)
+                end_idx = resolve_pos(end_val)
+
+                if step_val > 0:
+                    idx_range = range(start_idx, end_idx + 1, step_val)
+                else:
+                    idx_range = range(start_idx, end_idx - 1, step_val)
+
+                selected = [items[i] for i in idx_range if 0 <= i < n]
+            else:
+                selected = items
+
+            last_val = None
+            for item in selected:
+                self.environment.values[stmt.target] = make_independent_copy(item)
+                if stmt.target not in self.environment.types:
+                    self.environment.types[stmt.target] = "lit"
+                last_val = self.execute(stmt.body)
+            return last_val
+
         if isinstance(stmt, FunctionDeclaration):
             fn = UserFunction(
                 name=stmt.name,
@@ -279,6 +417,127 @@ class Interpreter:
 
         if isinstance(expr, Grouping):
             return self.evaluate(expr.expression)
+
+        if isinstance(expr, ListLiteral):
+            return [self.evaluate(e) for e in expr.elements]
+
+        if isinstance(expr, BrackLiteral):
+            return Brack(self.evaluate(e) for e in expr.elements)
+
+        if isinstance(expr, DictLiteral):
+            d = FlowDict()
+            for key_expr, val_expr in expr.entries:
+                key = self.evaluate(key_expr)
+                validate_dict_key(key, key_expr.line, key_expr.column, self.source_code)
+                if key in d:
+                    raise FlowRuntimeError(
+                        f"Duplicate dictionary key: {stringify_value(key)}",
+                        line=key_expr.line,
+                        column=key_expr.column,
+                        source_code=self.source_code,
+                    )
+                val = self.evaluate(val_expr)
+                d[key] = val
+            return d
+
+        if isinstance(expr, IndexAccess):
+            target = self.evaluate(expr.target)
+            index = self.evaluate(expr.index)
+
+            if isinstance(target, (list, Brack, tuple)):
+                if not isinstance(index, int) or isinstance(index, bool):
+                    raise FlowRuntimeError(
+                        f"List/brack index must be an integer, got '{get_type_name(index)}'",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+                n = len(target)
+                if index < -n or index >= n or n == 0:
+                    raise FlowRuntimeError(
+                        f"Index out of range: index {index} for collection of length {n}",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+                return target[index]
+
+            if isinstance(target, (FlowDict, dict)):
+                validate_dict_key(index, expr.index.line, expr.index.column, self.source_code)
+                if index not in target:
+                    raise FlowRuntimeError(
+                        f"KeyError: key {stringify_value(index)} not found in dictionary",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+                return target[index]
+
+            raise FlowRuntimeError(
+                f"Type '{get_type_name(target)}' is not indexable",
+                line=expr.line,
+                column=expr.column,
+                source_code=self.source_code,
+            )
+
+        if isinstance(expr, IndexAssignment):
+            target = self.evaluate(expr.target)
+            index = self.evaluate(expr.index)
+            value = self.evaluate(expr.value)
+
+            if isinstance(target, list):
+                if not isinstance(index, int) or isinstance(index, bool):
+                    raise FlowRuntimeError(
+                        f"List index must be an integer, got '{get_type_name(index)}'",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+                n = len(target)
+                if index < -n or index >= n or n == 0:
+                    raise FlowRuntimeError(
+                        f"Index out of range: index {index} for list of length {n}",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+                target[index] = value
+                return value
+
+            if isinstance(target, (Brack, tuple)):
+                raise FlowRuntimeError(
+                    "Cannot modify immutable brack: bracks do not support item assignment",
+                    line=expr.line,
+                    column=expr.column,
+                    source_code=self.source_code,
+                )
+
+            if isinstance(target, (FlowDict, dict)):
+                validate_dict_key(index, expr.index.line, expr.index.column, self.source_code)
+                target[index] = value
+                return value
+
+            raise FlowRuntimeError(
+                f"Type '{get_type_name(target)}' does not support index assignment",
+                line=expr.line,
+                column=expr.column,
+                source_code=self.source_code,
+            )
+
+        if isinstance(expr, MemberAccess):
+            target = self.evaluate(expr.target)
+            member = expr.member
+            if isinstance(target, (FlowDict, dict)):
+                if member == "keys":
+                    return DictKeysView(target)
+                if member == "values":
+                    return DictValuesView(target)
+            raise FlowRuntimeError(
+                f"Type '{get_type_name(target)}' has no member '{member}'",
+                line=expr.line,
+                column=expr.column,
+                source_code=self.source_code,
+            )
 
         if isinstance(expr, UnaryOp):
             return self._evaluate_unary(expr)

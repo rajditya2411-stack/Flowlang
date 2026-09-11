@@ -422,11 +422,12 @@ class TestFlowLangV1Compliance(unittest.TestCase):
         self.assertIsNotNone(res.error)
         self.assertIn("Unterminated block comment", res.error["message"])
 
-    # ------------------ 11. V2 Features Explicitly Excluded ------------------
+    # ------------------ 11. V2 Features Explicitly Excluded / Updated ------------------
 
-    def test_no_arrays_in_v1(self):
-        res = execute("lit arr = [1, 2, 3]")
-        self.assertIsNotNone(res.error)
+    def test_arrays_in_v2(self):
+        res = execute("lit arr = [1, 2, 3]\narr")
+        self.assertIsNone(res.error)
+        self.assertEqual(res.value, [1, 2, 3])
 
     def test_no_nil_in_v1(self):
         res = execute("lit n = nil")

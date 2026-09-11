@@ -89,7 +89,24 @@ say("Is special?", is_special)`,
   error_demo: `# Visual Error Pointer Demo
 str username = "Raj"
 say("Hello", username)
-say(missing_var)`
+say(missing_var)`,
+
+  collections: `# Collections: list, brack, dict
+list nums = [10, 20, 30]
+append_(nums, 40)
+say("List:", nums)
+
+brack b = (1, 2, 3)
+say("Brack:", b)
+
+dict user = << "name": "Raj", "age": 18 >>
+user["skill"] = "FlowLang"
+say("User name:", user["name"])
+
+say("--- Dict Iteration ---")
+for item in user {
+    say(item)
+}`
 };
 
 // DOM Elements
@@ -120,9 +137,10 @@ function updateLineNumbers() {
   const count = lines.length;
   let lineStr = "";
   for (let i = 1; i <= count; i++) {
-    lineStr += i + "\n";
+    lineStr += (i === 1 ? "" : "\n") + i;
   }
   lineNumbers.textContent = lineStr;
+  lineNumbers.scrollTop = editor.scrollTop;
 }
 
 // Sync line number scrolling with textarea

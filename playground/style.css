@@ -210,8 +210,9 @@ kbd {
 }
 
 .line-numbers {
-  width: 44px;
-  padding: 14px 8px 14px 0;
+  width: 48px;
+  min-width: 48px;
+  padding: 14px 10px 14px 0;
   text-align: right;
   font-family: var(--font-code);
   font-size: 14px;
@@ -221,6 +222,8 @@ kbd {
   border-right: 1px solid var(--border-color);
   user-select: none;
   overflow: hidden;
+  white-space: pre;
+  box-sizing: border-box;
 }
 
 .code-textarea {
@@ -235,9 +238,13 @@ kbd {
   outline: none;
   resize: none;
   white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
   tab-size: 4;
+  overflow-x: auto;
   overflow-y: auto;
   caret-color: var(--accent-blue);
+  box-sizing: border-box;
 }
 
 /* ==================== Output Panel ==================== */

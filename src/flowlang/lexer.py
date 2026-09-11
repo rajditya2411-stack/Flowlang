@@ -166,7 +166,9 @@ class Lexer:
 
             if char == "<":
                 self._advance()
-                if self._match("="):
+                if self._match("<"):
+                    tokens.append(Token(TokenType.LDICT, "<<", start_line, start_col))
+                elif self._match("="):
                     tokens.append(Token(TokenType.LESS_EQUAL, "<=", start_line, start_col))
                 else:
                     tokens.append(Token(TokenType.LESS, "<", start_line, start_col))
@@ -174,7 +176,9 @@ class Lexer:
 
             if char == ">":
                 self._advance()
-                if self._match("="):
+                if self._match(">"):
+                    tokens.append(Token(TokenType.RDICT, ">>", start_line, start_col))
+                elif self._match("="):
                     tokens.append(Token(TokenType.GREATER_EQUAL, ">=", start_line, start_col))
                 else:
                     tokens.append(Token(TokenType.GREATER, ">", start_line, start_col))
@@ -186,8 +190,12 @@ class Lexer:
                 ")": (TokenType.RPAREN, ")"),
                 "{": (TokenType.LBRACE, "{"),
                 "}": (TokenType.RBRACE, "}"),
+                "[": (TokenType.LBRACKET, "["),
+                "]": (TokenType.RBRACKET, "]"),
                 ",": (TokenType.COMMA, ","),
                 ";": (TokenType.SEMICOLON, ";"),
+                ":": (TokenType.COLON, ":"),
+                ".": (TokenType.DOT, "."),
             }
 
             if char in delims:

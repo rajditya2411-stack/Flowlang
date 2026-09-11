@@ -1,0 +1,51 @@
+# FlowLang V2 Collections Fundamentals Demo
+
+# 1. Lists (Mutable Ordered Collections)
+say("=== LIST DEMO ===")
+list nums = [10, 20, 30]
+append_(nums, 40)
+nums[1] = 99
+say("List:", nums)
+say("First element:", nums[0])
+say("Last element:", nums[-1])
+
+say("List iteration:")
+for val in nums {
+    say("  ->", val)
+}
+
+# 2. Bracks (Immutable Ordered Collections)
+say("=== BRACK DEMO ===")
+brack info = ("FlowLang", 2, "Collections")
+say("Brack:", info)
+say("Length:", len_(info))
+
+list editable = listb_(info)
+editable[0] = "FlowLang V2"
+say("Converted to mutable list:", editable)
+
+# 3. Dictionaries (Mutable Ordered Key-Value Collections)
+say("=== DICT DEMO ===")
+dict user = <<
+    "name": "Raj",
+    "role": "Creator",
+    "version": 2
+>>
+user["active"] = "yes"
+say("User name:", user["name"])
+say("Dict length:", len_(user))
+
+say("Dict iteration (key-value bracks):")
+for pair in user {
+    say("  pair:", pair)
+}
+
+say("Dict keys:")
+for k in user.keys {
+    say("  key:", k)
+}
+
+say("Dict ranged iteration (first 2 items):")
+for item in user(0; 1) {
+    say("  ranged:", item)
+}

@@ -28,6 +28,9 @@ class TokenType(Enum):
     STR = auto()            # str
     CHAR_TYPE = auto()      # char
     BOOL_TYPE = auto()      # bool
+    LIST = auto()           # list
+    BRACK = auto()          # brack
+    DICT = auto()           # dict
 
     # Control Flow Keywords
     IF = auto()             # if
@@ -69,17 +72,23 @@ class TokenType(Enum):
     # Punctuation & Delimiters
     COMMA = auto()          # ,
     SEMICOLON = auto()      # ;
+    COLON = auto()          # :
+    DOT = auto()            # .
     LPAREN = auto()         # (
     RPAREN = auto()         # )
     LBRACE = auto()         # {
     RBRACE = auto()         # }
+    LBRACKET = auto()       # [
+    RBRACKET = auto()       # ]
+    LDICT = auto()          # <<
+    RDICT = auto()          # >>
 
     # Structural
     NEWLINE = auto()
     EOF = auto()
 
 
-# Keyword lookup table for FlowLang V1 (all lowercase)
+# Keyword lookup table for FlowLang V1 & V2 (all lowercase)
 KEYWORDS: dict[str, TokenType] = {
     "true": TokenType.TRUE,
     "false": TokenType.FALSE,
@@ -89,6 +98,9 @@ KEYWORDS: dict[str, TokenType] = {
     "str": TokenType.STR,
     "char": TokenType.CHAR_TYPE,
     "bool": TokenType.BOOL_TYPE,
+    "list": TokenType.LIST,
+    "brack": TokenType.BRACK,
+    "dict": TokenType.DICT,
     "if": TokenType.IF,
     "elif": TokenType.ELIF,
     "else": TokenType.ELSE,
