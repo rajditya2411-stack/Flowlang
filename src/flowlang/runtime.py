@@ -42,6 +42,16 @@ class ReturnSignal(Exception):
         super().__init__()
 
 
+class UserRaiseSignal(Exception):
+    """Raised by raise statements to unwind execution until caught by try/catch."""
+
+    def __init__(self, message: str, line: int = 1, column: int = 1):
+        self.message = message
+        self.line = line
+        self.column = column
+        super().__init__(message)
+
+
 class Brack(tuple):
     """Represents a FlowLang immutable ordered collection (brack)."""
 
@@ -114,6 +124,33 @@ class StructInstance:
     def __repr__(self) -> str:
         f_strs = ", ".join(f"{k}: {stringify_element(v)}" for k, v in self.fields.items())
         return f"<< {f_strs} >>"
+
+
+@dataclass
+class EnumType:
+    name: str
+    members: list[str]  # list of member names in declaration order
+
+
+class EnumValue:
+    def __init__(self, enum_type: EnumType, member: str, index: int):
+        self.enum_type = enum_type
+        self.member = member
+        self.index = index
+
+    def __repr__(self) -> str:
+        return f"{self.enum_type.name}.{self.member}"
+
+    def __str__(self) -> str:
+        return f"{self.enum_type.name}.{self.member}"
+
+    def __hash__(self) -> int:
+        return hash((self.enum_type.name, self.member))
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, EnumValue):
+            return self.enum_type.name == other.enum_type.name and self.member == other.member
+        return False
 
 
 def parse_bk_input(raw: Any, line: int = 1, col: int = 1, source_code: Optional[str] = None) -> Brack:
@@ -283,6 +320,8 @@ def get_type_name(value: Any) -> str:
         return "dict"
     if isinstance(value, StructInstance):
         return value.struct_type.name
+    if isinstance(value, EnumValue):
+        return value.enum_type.name
     if isinstance(value, FlowCallable):
         return "function"
     return type(value).__name__
@@ -310,8 +349,15 @@ def check_type_match(expected_type: Optional[str], value: Any) -> bool:
         return isinstance(value, (Brack, tuple))
     if expected_type == "dict":
         return isinstance(value, (FlowDict, dict))
+    if expected_type == "function":
+        return isinstance(value, FlowCallable)
     if isinstance(value, StructInstance):
         return value.struct_type.name == expected_type
+    if isinstance(value, EnumValue):
+        return value.enum_type.name == expected_type
+    standard_types = {"lit", "int", "flt", "str", "char", "bool", "list", "brack", "dict", "function"}
+    if expected_type not in standard_types:
+        return False
     return True
 
 
@@ -380,7 +426,17 @@ class UserFunction(FlowCallable):
                 source_code=interpreter.source_code,
             )
 
-        call_env = Environment(parent=self.closure)
+        current_depth = getattr(interpreter, "call_depth", 0)
+        if current_depth >= 1000:
+            raise FlowRuntimeError(
+                "Maximum recursion depth exceeded (1000)",
+                line=line,
+                column=column,
+                source_code=interpreter.source_code,
+            )
+        interpreter.call_depth = current_depth + 1
+
+        call_env = Environment(parent=self.closure, is_function=True)
         for (param_name, param_type), arg_val in zip(self.parameters, arguments):
             if param_type == "lit":
                 if isinstance(arg_val, list):
@@ -411,6 +467,7 @@ class UserFunction(FlowCallable):
             ret_val = ret.value
         finally:
             interpreter.environment = previous_env
+            interpreter.call_depth = current_depth
 
         # Enforce return type
         if not has_returned or ret_val is None:
@@ -448,16 +505,47 @@ class UserFunction(FlowCallable):
 
 
 class Environment:
-    """Lexical scope environment supporting nested parent scopes, type tracking, mutability, and structs."""
+    """Lexical scope environment supporting nested parent scopes, type tracking, mutability, structs, and enums."""
 
-    def __init__(self, parent: Optional["Environment"] = None):
+    def __init__(self, parent: Optional["Environment"] = None, is_function: bool = False):
         self.parent = parent
+        self.is_function = is_function
         self.values: dict[str, Any] = {}
         self.types: dict[str, Optional[str]] = {}
         self.is_mutable: dict[str, bool] = {}
         self.struct_types: dict[str, StructType] = {}
+        self.enum_types: dict[str, EnumType] = {}
+        self.declared_globals: set[str] = set()
 
-    def define_struct(self, name: str, struct_type: StructType) -> None:
+    def get_enclosing_function_env(self) -> Optional["Environment"]:
+        env = self
+        while env is not None:
+            if env.is_function:
+                return env
+            env = env.parent
+        return None
+
+    def _exists_in_function_hierarchy(self, name: str, fn_env: "Environment") -> bool:
+        env = self
+        while env is not None:
+            if name in env.values:
+                return True
+            if env is fn_env:
+                break
+            env = env.parent
+        return False
+
+    def declare_global(self, name: str) -> None:
+        self.declared_globals.add(name)
+
+    def define_struct(self, name: str, struct_type: StructType, line: int = 1, column: int = 1, source_code: Optional[str] = None) -> None:
+        if name in self.values or name in self.struct_types or name in self.enum_types:
+            raise FlowRuntimeError(
+                f"Identifier '{name}' is already defined in this scope",
+                line=line,
+                column=column,
+                source_code=source_code,
+            )
         self.struct_types[name] = struct_type
 
     def get_struct(self, name: str) -> Optional[StructType]:
@@ -465,6 +553,23 @@ class Environment:
             return self.struct_types[name]
         if self.parent is not None:
             return self.parent.get_struct(name)
+        return None
+
+    def define_enum(self, name: str, enum_type: EnumType, line: int = 1, column: int = 1, source_code: Optional[str] = None) -> None:
+        if name in self.values or name in self.struct_types or name in self.enum_types:
+            raise FlowRuntimeError(
+                f"Identifier '{name}' is already defined in this scope",
+                line=line,
+                column=column,
+                source_code=source_code,
+            )
+        self.enum_types[name] = enum_type
+
+    def get_enum(self, name: str) -> Optional[EnumType]:
+        if name in self.enum_types:
+            return self.enum_types[name]
+        if self.parent is not None:
+            return self.parent.get_enum(name)
         return None
 
     def define(
@@ -478,6 +583,14 @@ class Environment:
         source_code: Optional[str] = None,
     ) -> None:
         """Define a new variable in current local scope with its type constraint and mutability."""
+        if name in self.values or name in self.struct_types or name in self.enum_types:
+            if not isinstance(self.values.get(name), BuiltinFunction):
+                raise FlowRuntimeError(
+                    f"Identifier '{name}' is already defined in this scope",
+                    line=line,
+                    column=column,
+                    source_code=source_code,
+                )
         if not check_type_match(type_name, value):
             raise FlowRuntimeError(
                 f"Type mismatch: cannot initialize variable '{name}' of type '{type_name}' with value of type '{get_type_name(value)}'",
@@ -539,6 +652,18 @@ class Environment:
                 self.values[name] = make_independent_copy(value)
             return
 
+        # Check if we are inside a function assigning to an outer variable
+        fn_env = self.get_enclosing_function_env()
+        if fn_env is not None and not self._exists_in_function_hierarchy(name, fn_env):
+            if fn_env.parent is not None and fn_env.parent._exists(name):
+                if name not in fn_env.declared_globals:
+                    raise FlowRuntimeError(
+                        f"Cannot assign to global variable '{name}' without 'global' declaration in function",
+                        line=line,
+                        column=column,
+                        source_code=source_code,
+                    )
+
         if self.parent is not None and self.parent._exists(name):
             self.parent.assign(name, value, line, column, source_code)
             return
@@ -598,6 +723,8 @@ def stringify_element(value: Any) -> str:
     if isinstance(value, StructInstance):
         items = ", ".join(f"{k}: {stringify_element(v)}" for k, v in value.fields.items())
         return f"<< {items} >>"
+    if isinstance(value, EnumValue):
+        return f"{value.enum_type.name}.{value.member}"
     return stringify_value(value)
 
 
@@ -625,6 +752,8 @@ def stringify_value(value: Any) -> str:
     if isinstance(value, StructInstance):
         items = ", ".join(f"{k}: {stringify_element(v)}" for k, v in value.fields.items())
         return f"<< {items} >>"
+    if isinstance(value, EnumValue):
+        return f"{value.enum_type.name}.{value.member}"
     if value is None:
         return "none"
     return str(value)

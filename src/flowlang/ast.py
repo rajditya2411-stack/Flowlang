@@ -245,6 +245,16 @@ class StructDeclaration(Statement):
 
 
 @dataclass
+class EnumDeclaration(Statement):
+    name: str
+    members: list[str]  # list of member names
+
+    def __repr__(self) -> str:
+        m = ", ".join(self.members)
+        return f"EnumDecl({self.name} = << {m} >>)"
+
+
+@dataclass
 class Block(Statement):
     statements: list[Statement]
 
@@ -326,6 +336,33 @@ class ReturnStatement(Statement):
 
     def __repr__(self) -> str:
         return f"Return({self.expression})"
+
+
+@dataclass
+class TryCatchStatement(Statement):
+    try_block: Block
+    error_type: str
+    error_name: str
+    catch_block: Block
+
+    def __repr__(self) -> str:
+        return f"TryCatch(try={self.try_block}, catch=({self.error_type} {self.error_name}) {self.catch_block})"
+
+
+@dataclass
+class RaiseStatement(Statement):
+    expression: Expression
+
+    def __repr__(self) -> str:
+        return f"Raise({self.expression})"
+
+
+@dataclass
+class GlobalStatement(Statement):
+    name: str
+
+    def __repr__(self) -> str:
+        return f"Global({self.name})"
 
 
 @dataclass

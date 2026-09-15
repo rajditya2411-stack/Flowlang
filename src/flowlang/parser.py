@@ -45,6 +45,10 @@ from flowlang.ast import (
     BreakStatement,
     ContinueStatement,
     StructDeclaration,
+    EnumDeclaration,
+    TryCatchStatement,
+    RaiseStatement,
+    GlobalStatement,
 )
 
 
@@ -170,10 +174,26 @@ class Parser:
             self._advance()
             return self._struct_declaration()
 
+        if self._check(TokenType.ENUM):
+            self._advance()
+            return self._enum_declaration()
+
+        if self._check(TokenType.TRY):
+            self._advance()
+            return self._try_catch_statement()
+
+        if self._check(TokenType.RAISE):
+            self._advance()
+            return self._raise_statement()
+
+        if self._check(TokenType.GLOBAL):
+            self._advance()
+            return self._global_statement()
+
         if self._check(TokenType.LBRACE):
             return self._block()
 
-        # Variable declarations: (mut)? (lit | int | flt | str | char | bool | list | brack | dict | StructName) <id> = <expr>
+        # Variable declarations: (mut)? (lit | int | flt | str | char | bool | list | brack | dict | function | StructName | EnumName) <id> = <expr>
         type_tokens = (
             TokenType.LIT,
             TokenType.INT,
@@ -184,6 +204,7 @@ class Parser:
             TokenType.LIST,
             TokenType.BRACK,
             TokenType.DICT,
+            TokenType.FUNCTION_TYPE,
         )
         if self._check(TokenType.IDENTIFIER) and self._peek(0).value == "none" and self._peek(1).type == TokenType.IDENTIFIER:
             none_tok = self._peek(0)
@@ -255,11 +276,12 @@ class Parser:
                     TokenType.LIST,
                     TokenType.BRACK,
                     TokenType.DICT,
+                    TokenType.FUNCTION_TYPE,
                     TokenType.IDENTIFIER,
                 )
                 if self._check_any(*type_tokens):
                     t_tok = self._advance()
-                    t_name = "char" if t_tok.type == TokenType.CHAR_TYPE else ("bool" if t_tok.type == TokenType.BOOL_TYPE else t_tok.value)
+                    t_name = "char" if t_tok.type == TokenType.CHAR_TYPE else ("bool" if t_tok.type == TokenType.BOOL_TYPE else ("function" if t_tok.type == TokenType.FUNCTION_TYPE else t_tok.value))
                     f_name_tok = self._consume(TokenType.IDENTIFIER, f"Expected field name after type '{t_name}' in struct '{name_tok.value}'")
                     fields.append((f_name_tok.value, t_name))
                 else:
@@ -286,7 +308,7 @@ class Parser:
     def _var_declaration(self, is_mutable: bool = False) -> VariableDeclaration:
         """var_decl -> ('mut')? (type | IDENTIFIER) IDENTIFIER '=' expression"""
         type_tok = self._advance()
-        type_name = "char" if type_tok.type == TokenType.CHAR_TYPE else ("bool" if type_tok.type == TokenType.BOOL_TYPE else type_tok.value)
+        type_name = "char" if type_tok.type == TokenType.CHAR_TYPE else ("bool" if type_tok.type == TokenType.BOOL_TYPE else ("function" if type_tok.type == TokenType.FUNCTION_TYPE else type_tok.value))
         name_tok = self._consume(TokenType.IDENTIFIER, f"Expected variable name after '{type_name}'")
         if name_tok.value == "none":
             raise ParserError(
@@ -475,6 +497,7 @@ class Parser:
             TokenType.LIST,
             TokenType.BRACK,
             TokenType.DICT,
+            TokenType.FUNCTION_TYPE,
         )
 
         self._skip_newlines()
@@ -482,10 +505,19 @@ class Parser:
             while True:
                 self._skip_newlines()
                 type_tok = None
-                if self._check_any(*type_tokens) and self._peek(1).type == TokenType.IDENTIFIER:
+                if (self._check_any(*type_tokens) or (self._check(TokenType.IDENTIFIER) and self._peek(1).type == TokenType.IDENTIFIER)):
                     type_tok = self._advance()
                 param_tok = self._consume(TokenType.IDENTIFIER, "Expected parameter name")
-                param_type = type_tok.value if type_tok else "lit"
+                if type_tok is None:
+                    param_type = "lit"
+                elif type_tok.type == TokenType.CHAR_TYPE:
+                    param_type = "char"
+                elif type_tok.type == TokenType.BOOL_TYPE:
+                    param_type = "bool"
+                elif type_tok.type == TokenType.FUNCTION_TYPE:
+                    param_type = "function"
+                else:
+                    param_type = type_tok.value
                 parameters.append((param_tok.value, param_type))
                 self._skip_newlines()
                 if not self._match(TokenType.COMMA):
@@ -507,7 +539,7 @@ class Parser:
                 source_code=self.source_code,
             )
 
-        if not self._check_any(*type_tokens):
+        if not (self._check_any(*type_tokens) or self._check(TokenType.IDENTIFIER)):
             cur = self._peek()
             raise ParserError(
                 f"Expected valid return type after '->', got '{cur.value or cur.type.name}'",
@@ -517,7 +549,14 @@ class Parser:
             )
 
         return_type_tok = self._advance()
-        return_type = return_type_tok.value
+        if return_type_tok.type == TokenType.CHAR_TYPE:
+            return_type = "char"
+        elif return_type_tok.type == TokenType.BOOL_TYPE:
+            return_type = "bool"
+        elif return_type_tok.type == TokenType.FUNCTION_TYPE:
+            return_type = "function"
+        else:
+            return_type = return_type_tok.value
 
         self._skip_newlines()
         body = self._block()
@@ -529,6 +568,86 @@ class Parser:
             parameters=parameters,
             return_type=return_type,
             body=body,
+        )
+
+    def _enum_declaration(self) -> EnumDeclaration:
+        """enum_decl -> 'enum' IDENTIFIER '=' '<<' (IDENTIFIER (',' IDENTIFIER)*)? '>>'"""
+        enum_tok = self._previous()
+        name_tok = self._consume(TokenType.IDENTIFIER, "Expected enum name after 'enum'")
+        self._consume(TokenType.ASSIGN, "Expected '=' after enum name")
+        self._consume(TokenType.LDICT, "Expected '<<' to start enum definition")
+        members: list[str] = []
+        seen_members: set[str] = set()
+        self._skip_newlines()
+        if not self._check(TokenType.RDICT):
+            while True:
+                self._skip_newlines()
+                m_tok = self._consume(TokenType.IDENTIFIER, f"Expected enum member name in enum '{name_tok.value}'")
+                if m_tok.value in seen_members:
+                    raise ParserError(
+                        f"Duplicate member '{m_tok.value}' in enum '{name_tok.value}'",
+                        line=m_tok.line,
+                        column=m_tok.column,
+                        source_code=self.source_code,
+                    )
+                seen_members.add(m_tok.value)
+                members.append(m_tok.value)
+                self._skip_newlines()
+                if not (self._match(TokenType.COMMA) or self._match(TokenType.SEMICOLON)):
+                    break
+                self._skip_newlines()
+        self._consume(TokenType.RDICT, "Expected '>>' at end of enum definition")
+        self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
+        return EnumDeclaration(
+            line=enum_tok.line,
+            column=enum_tok.column,
+            name=name_tok.value,
+            members=members,
+        )
+
+    def _try_catch_statement(self) -> TryCatchStatement:
+        """try_catch -> 'try' block 'catch' '(' 'str' IDENTIFIER ')' block"""
+        try_tok = self._previous()
+        self._skip_newlines()
+        try_block = self._block()
+        self._skip_newlines()
+        self._consume(TokenType.CATCH, "Expected 'catch' after try block")
+        self._consume(TokenType.LPAREN, "Expected '(' after 'catch'")
+        self._skip_newlines()
+        err_type_tok = self._consume(TokenType.STR, "Expected 'str' error type in catch clause")
+        err_name_tok = self._consume(TokenType.IDENTIFIER, "Expected error variable name after 'str'")
+        self._consume(TokenType.RPAREN, "Expected ')' after catch parameter")
+        self._skip_newlines()
+        catch_block = self._block()
+        return TryCatchStatement(
+            line=try_tok.line,
+            column=try_tok.column,
+            try_block=try_block,
+            error_type="str",
+            error_name=err_name_tok.value,
+            catch_block=catch_block,
+        )
+
+    def _raise_statement(self) -> RaiseStatement:
+        """raise_statement -> 'raise' expression"""
+        raise_tok = self._previous()
+        expr = self._expression()
+        self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
+        return RaiseStatement(
+            line=raise_tok.line,
+            column=raise_tok.column,
+            expression=expr,
+        )
+
+    def _global_statement(self) -> GlobalStatement:
+        """global_statement -> 'global' IDENTIFIER"""
+        global_tok = self._previous()
+        name_tok = self._consume(TokenType.IDENTIFIER, "Expected variable name after 'global'")
+        self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
+        return GlobalStatement(
+            line=global_tok.line,
+            column=global_tok.column,
+            name=name_tok.value,
         )
 
     def _return_statement(self) -> ReturnStatement:

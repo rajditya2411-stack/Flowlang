@@ -46,10 +46,18 @@ class TokenType(Enum):
     # Modifiers & Type Definitions
     MUT = auto()            # mut
     STRUCT = auto()         # struct
+    ENUM = auto()           # enum
+    FUNCTION_TYPE = auto()  # function
 
     # Function & Return Keywords
     DFN = auto()            # dfn
     RETURN = auto()         # return
+    GLOBAL = auto()         # global
+
+    # Error Handling Keywords
+    TRY = auto()            # try
+    CATCH = auto()          # catch
+    RAISE = auto()          # raise
 
     # Module Keywords
     IMPORT = auto()         # import
@@ -128,8 +136,14 @@ KEYWORDS: dict[str, TokenType] = {
     "continue": TokenType.CONTINUE,
     "mut": TokenType.MUT,
     "struct": TokenType.STRUCT,
+    "enum": TokenType.ENUM,
+    "function": TokenType.FUNCTION_TYPE,
     "dfn": TokenType.DFN,
     "return": TokenType.RETURN,
+    "global": TokenType.GLOBAL,
+    "try": TokenType.TRY,
+    "catch": TokenType.CATCH,
+    "raise": TokenType.RAISE,
     "import": TokenType.IMPORT,
     "say": TokenType.SAY,
     "and": TokenType.AND,

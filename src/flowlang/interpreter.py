@@ -43,6 +43,10 @@ from flowlang.ast import (
     BreakStatement,
     ContinueStatement,
     StructDeclaration,
+    EnumDeclaration,
+    TryCatchStatement,
+    RaiseStatement,
+    GlobalStatement,
 )
 import math
 from flowlang.runtime import (
@@ -51,6 +55,7 @@ from flowlang.runtime import (
     BuiltinFunction,
     UserFunction,
     ReturnSignal,
+    UserRaiseSignal,
     Char,
     Brack,
     FlowDict,
@@ -58,6 +63,8 @@ from flowlang.runtime import (
     DictValuesView,
     StructType,
     StructInstance,
+    EnumType,
+    EnumValue,
     validate_dict_key,
     make_independent_copy,
     deep_freeze,
@@ -112,9 +119,16 @@ class Interpreter:
         self.source_code = source_code
         self.output_handler = output_handler or print
         self.input_handler = input_handler or input
-        self.globals = globals_env if globals_env is not None else Environment()
+        if globals_env is not None:
+            self.globals = globals_env
+        else:
+            self.globals = Environment()
+            self._init_builtins()
         self.environment = self.globals
-        self._init_builtins()
+        self.call_depth = 0
+        import sys
+        if sys.getrecursionlimit() < 10000:
+            sys.setrecursionlimit(10000)
 
     def _init_builtins(self) -> None:
         """Register built-in functions in the global environment."""
@@ -163,6 +177,8 @@ class Interpreter:
             val = args[0]
             if isinstance(val, bool):
                 raise FlowRuntimeError("int_() cannot convert bool to int", line=line, column=col, source_code=self.source_code)
+            if isinstance(val, EnumValue):
+                return val.index
             if isinstance(val, Char):
                 raise FlowRuntimeError("int_() cannot convert char to int in FlowLang V2 (deferred to V3)", line=line, column=col, source_code=self.source_code)
             if isinstance(val, int):
@@ -210,6 +226,8 @@ class Interpreter:
         def builtin_str(interpreter: Any, args: list[Any], line: int, col: int) -> str:
             if len(args) != 1:
                 raise FlowRuntimeError("str_() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
+            if isinstance(args[0], EnumValue):
+                return args[0].member
             return stringify_value(args[0])
 
         # char_(x) / char(x)
@@ -378,10 +396,70 @@ class Interpreter:
 
         if isinstance(stmt, StructDeclaration):
             struct_type = StructType(name=stmt.name, fields=stmt.fields)
-            self.environment.define_struct(stmt.name, struct_type)
+            self.environment.define_struct(stmt.name, struct_type, line=stmt.line, column=stmt.column, source_code=self.source_code)
+            return None
+
+        if isinstance(stmt, EnumDeclaration):
+            enum_type = EnumType(name=stmt.name, members=stmt.members)
+            self.environment.define_enum(stmt.name, enum_type, line=stmt.line, column=stmt.column, source_code=self.source_code)
+            return None
+
+        if isinstance(stmt, GlobalStatement):
+            fn_env = self.environment.get_enclosing_function_env()
+            if fn_env is not None:
+                fn_env.declare_global(stmt.name)
+            return None
+
+        if isinstance(stmt, RaiseStatement):
+            err_msg = self.evaluate(stmt.expression)
+            if not isinstance(err_msg, str):
+                raise FlowRuntimeError(
+                    f"Raise expression must evaluate to a string, got '{get_type_name(err_msg)}'",
+                    line=stmt.line,
+                    column=stmt.column,
+                    source_code=self.source_code,
+                )
+            raise UserRaiseSignal(err_msg, line=stmt.line, column=stmt.column)
+
+        if isinstance(stmt, TryCatchStatement):
+            previous_env = self.environment
+            try:
+                try_env = Environment(parent=self.environment)
+                self.execute_block(stmt.try_block.statements, try_env)
+            except UserRaiseSignal as u_sig:
+                catch_env = Environment(parent=previous_env)
+                catch_env.define(stmt.error_name, u_sig.message, type_name="str", is_mutable=False, line=stmt.line, column=stmt.column, source_code=self.source_code)
+                self.execute_block(stmt.catch_block.statements, catch_env)
+            except FlowRuntimeError as r_err:
+                catch_env = Environment(parent=previous_env)
+                catch_env.define(stmt.error_name, r_err.message, type_name="str", is_mutable=False, line=stmt.line, column=stmt.column, source_code=self.source_code)
+                self.execute_block(stmt.catch_block.statements, catch_env)
+            finally:
+                self.environment = previous_env
             return None
 
         if isinstance(stmt, VariableDeclaration):
+            enum_type = self.environment.get_enum(stmt.type_name)
+            if enum_type is not None:
+                value = self.evaluate(stmt.initializer)
+                if not (isinstance(value, EnumValue) and value.enum_type.name == stmt.type_name):
+                    raise FlowRuntimeError(
+                        f"Type mismatch: cannot initialize variable '{stmt.name}' of type '{stmt.type_name}' with value of type '{get_type_name(value)}'",
+                        line=stmt.line,
+                        column=stmt.column,
+                        source_code=self.source_code,
+                    )
+                self.environment.define(
+                    stmt.name,
+                    value,
+                    type_name=stmt.type_name,
+                    is_mutable=stmt.is_mutable,
+                    line=stmt.line,
+                    column=stmt.column,
+                    source_code=self.source_code,
+                )
+                return None
+
             struct_type = self.environment.get_struct(stmt.type_name)
             if struct_type is not None:
                 if isinstance(stmt.initializer, StructLiteral):
@@ -597,7 +675,7 @@ class Interpreter:
                 body=stmt.body,
                 closure=self.environment,
             )
-            self.environment.define(stmt.name, fn, type_name="lit")
+            self.environment.define(stmt.name, fn, type_name="function", line=stmt.line, column=stmt.column, source_code=self.source_code)
             return None
 
         if isinstance(stmt, ReturnStatement):
@@ -661,6 +739,9 @@ class Interpreter:
             return expr.value
 
         if isinstance(expr, Identifier):
+            enum_type = self.environment.get_enum(expr.name)
+            if enum_type is not None:
+                return enum_type
             return self.environment.get(expr.name, expr.line, expr.column, self.source_code)
 
         if isinstance(expr, Grouping):
@@ -928,6 +1009,15 @@ class Interpreter:
         if isinstance(expr, MemberAccess):
             target = self.evaluate(expr.target)
             member = expr.member
+            if isinstance(target, EnumType):
+                if member in target.members:
+                    return EnumValue(target, member, target.members.index(member))
+                raise FlowRuntimeError(
+                    f"Enum '{target.name}' has no member '{member}'",
+                    line=expr.line,
+                    column=expr.column,
+                    source_code=self.source_code,
+                )
             if isinstance(target, list):
                 if member == "clone":
                     return make_independent_copy(target)
@@ -1259,7 +1349,7 @@ class Interpreter:
 
         # Relational comparisons
         if op in (">", ">=", "<", "<="):
-            if isinstance(left, Char) or isinstance(right, Char):
+            if isinstance(left, (Char, EnumValue)) or isinstance(right, (Char, EnumValue)):
                 raise FlowRuntimeError(
                     f"Comparison operator '{op}' requires operands of same comparable type, got '{get_type_name(left)}' and '{get_type_name(right)}'",
                     line=line,
@@ -1311,6 +1401,9 @@ class Interpreter:
             return True
         if left is None or right is None:
             return False
+
+        if isinstance(left, EnumValue) or isinstance(right, EnumValue):
+            return isinstance(left, EnumValue) and isinstance(right, EnumValue) and left.enum_type.name == right.enum_type.name
 
         left_is_bool = isinstance(left, bool)
         right_is_bool = isinstance(right, bool)
