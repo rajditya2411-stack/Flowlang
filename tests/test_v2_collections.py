@@ -93,12 +93,19 @@ class TestV2List(unittest.TestCase):
         b[1] = 5
         say(b)
         say(nums)
+
+        list c = nums.clone
+        c[1] = 99
+        say(c)
+        say(nums)
         """
         res = execute(code)
         self.assertIsNone(res.error)
         lines = res.output.strip().split("\n")
         self.assertEqual(lines[0], "[1, 5, 3, 4]")
-        self.assertEqual(lines[1], "[1, 2, 3, 4]")
+        self.assertEqual(lines[1], "[1, 5, 3, 4]")
+        self.assertEqual(lines[2], "[1, 99, 3, 4]")
+        self.assertEqual(lines[3], "[1, 5, 3, 4]")
 
     def test_list_iteration(self):
         code = """

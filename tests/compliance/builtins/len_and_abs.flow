@@ -1,5 +1,5 @@
 # Functions and Math
-dfn square(x) {
+dfn square(x) -> int {
     return x * x
 }
 say("square:", square(5))

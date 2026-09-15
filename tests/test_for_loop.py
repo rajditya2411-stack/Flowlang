@@ -52,7 +52,7 @@ class TestForLoopAndBuiltins(unittest.TestCase):
 
     def test_while_countdown(self):
         source = """
-        lit i = 5
+        mut lit i = 5
         while i > 0 {
             say("Countdown:", i)
             i = i - 1
@@ -67,7 +67,7 @@ class TestForLoopAndBuiltins(unittest.TestCase):
 
     def test_do_while(self):
         source = """
-        lit i = 0
+        mut lit i = 0
         do {
             say("step:", i)
             i = i + 1

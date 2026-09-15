@@ -66,7 +66,7 @@ class TestInterpreter(unittest.TestCase):
 
     def test_variables_and_reassignment(self):
         source = """
-        lit x = 10
+        mut lit x = 10
         lit y = 20
         x = x + y
         x
@@ -76,7 +76,7 @@ class TestInterpreter(unittest.TestCase):
     def test_if_elif_else(self):
         source1 = """
         lit x = 10
-        lit res = 0
+        mut lit res = 0
         if x > 5 {
             res = 100
         } else {
@@ -88,7 +88,7 @@ class TestInterpreter(unittest.TestCase):
 
         source2 = """
         lit x = 0
-        lit res = 0
+        mut lit res = 0
         if x > 0 {
             res = 1
         } elif x == 0 {
@@ -102,7 +102,7 @@ class TestInterpreter(unittest.TestCase):
 
     def test_while_loop(self):
         source = """
-        lit count = 0
+        mut lit count = 0
         while count < 5 {
             count = count + 1
         }

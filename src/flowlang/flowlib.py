@@ -347,6 +347,41 @@ def fn_join(interpreter: Any, args: list[Any], line: int, col: int) -> str:
     return sep.join(stringify_value(item) for item in collection)
 
 
+def fn_abs(interpreter: Any, args: list[Any], line: int, col: int) -> Any:
+    if len(args) != 1:
+        raise FlowRuntimeError(f"abs_() expected 1 argument, got {len(args)}", line=line, column=col, source_code=interpreter.source_code)
+    val = args[0]
+    if not isinstance(val, (int, float)) or isinstance(val, bool):
+        raise FlowRuntimeError(f"abs_() argument must be an int or flt, got '{get_type_name(val)}'", line=line, column=col, source_code=interpreter.source_code)
+    if isinstance(val, int):
+        res = abs(val)
+        if res > 2147483647:
+            raise FlowRuntimeError(
+                f"Integer overflow: result {res} exceeds 32-bit signed integer range (-2147483648 to 2147483647)",
+                line=line,
+                column=col,
+                source_code=interpreter.source_code,
+            )
+        return res
+    return abs(val)
+
+
+def fn_clamp(interpreter: Any, args: list[Any], line: int, col: int) -> Any:
+    if len(args) != 3:
+        raise FlowRuntimeError(f"clamp_() expected 3 arguments (val, min_val, max_val), got {len(args)}", line=line, column=col, source_code=interpreter.source_code)
+    val, min_val, max_val = args[0], args[1], args[2]
+    for name, v in (("val", val), ("min_val", min_val), ("max_val", max_val)):
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            raise FlowRuntimeError(f"clamp_() argument '{name}' must be an int or flt, got '{get_type_name(v)}'", line=line, column=col, source_code=interpreter.source_code)
+    if min_val > max_val:
+        raise FlowRuntimeError(f"clamp_() min_val ({min_val}) cannot be greater than max_val ({max_val})", line=line, column=col, source_code=interpreter.source_code)
+    if val < min_val:
+        return min_val
+    if val > max_val:
+        return max_val
+    return val
+
+
 FLOWLIB_FUNCTIONS: dict[str, BuiltinFunction] = {
     # 13 Collection functions
     "min_": BuiltinFunction("min_", fn_min, expected_arity=1),
@@ -374,4 +409,10 @@ FLOWLIB_FUNCTIONS: dict[str, BuiltinFunction] = {
     "endswith_": BuiltinFunction("endswith_", fn_endswith, expected_arity=2),
     "split_": BuiltinFunction("split_", fn_split, expected_arity=None),
     "join_": BuiltinFunction("join_", fn_join, expected_arity=2),
+    # Math functions
+    "abs_": BuiltinFunction("abs_", fn_abs, expected_arity=1),
+    "abs": BuiltinFunction("abs", fn_abs, expected_arity=1),
+    "clamp_": BuiltinFunction("clamp_", fn_clamp, expected_arity=3),
+    "clamp": BuiltinFunction("clamp", fn_clamp, expected_arity=3),
 }
+

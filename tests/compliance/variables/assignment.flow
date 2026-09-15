@@ -1,5 +1,5 @@
 # Variable Assignment and Evaluation
-lit a = 10
+mut lit a = 10
 lit b = 20
 lit c = a + b
 say("a:", a)
@@ -12,7 +12,7 @@ say("new a:", a)
 say("c unchanged:", c)
 
 # Sequential updates
-lit x = 1
+mut lit x = 1
 x = x + 1
 x = x + 1
 say("x:", x)

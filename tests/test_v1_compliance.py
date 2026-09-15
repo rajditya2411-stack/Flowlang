@@ -38,7 +38,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_lit_dynamic_typing(self):
         code = """
-        lit x = 10
+        mut lit x = 10
         say(x)
         x = "raj"
         say(x)
@@ -55,23 +55,23 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_static_typed_declarations_valid(self):
         code = """
-        int i = 42
+        mut int i = 42
         i = 100
         say(i)
 
-        flt f = 3.14
+        mut flt f = 3.14
         f = 2.718
         say(f)
 
-        str s = "hello"
+        mut str s = "hello"
         s = "world"
         say(s)
 
-        char c = 'A'
+        mut char c = 'A'
         c = 'B'
         say(c)
 
-        bool b = true
+        mut bool b = true
         b = false
         say(b)
         """
@@ -81,27 +81,27 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_static_typed_declarations_mismatch_error(self):
         # int assigned string
-        res = execute("int x = 10\nx = \"hello\"")
+        res = execute("mut int x = 10\nx = \"hello\"")
         self.assertIsNotNone(res.error)
         self.assertIn("Type mismatch", res.error["message"])
 
         # flt assigned int
-        res = execute("flt z = 2.5\nz = 10")
+        res = execute("mut flt z = 2.5\nz = 10")
         self.assertIsNotNone(res.error)
         self.assertIn("Type mismatch", res.error["message"])
 
         # str assigned int
-        res = execute("str s = \"hello\"\ns = 42")
+        res = execute("mut str s = \"hello\"\ns = 42")
         self.assertIsNotNone(res.error)
         self.assertIn("Type mismatch", res.error["message"])
 
         # bool assigned int
-        res = execute("bool flag = true\nflag = 1")
+        res = execute("mut bool flag = true\nflag = 1")
         self.assertIsNotNone(res.error)
         self.assertIn("Type mismatch", res.error["message"])
 
         # char assigned multi-char
-        res = execute("char c = 'A'\nc = \"too long\"")
+        res = execute("mut char c = 'A'\nc = \"too long\"")
         self.assertIsNotNone(res.error)
         self.assertIn("Type mismatch", res.error["message"])
 
@@ -182,7 +182,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
         say(2 + x)
         say("pi: " + 3.14)
         say("grade: " + 'A')
-        say("status: " + true)
+        say("status: " + str_(true))
         """
         res = self.run_code(code)
         lines = res.output.strip().split("\n")
@@ -258,7 +258,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_if_elif_else(self):
         code = """
-        dfn check(val) {
+        dfn check(val) -> lit {
             if val > 10 {
                 say("big")
             } elif val == 10 {
@@ -277,7 +277,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_while_loop(self):
         code = """
-        lit i = 1
+        mut lit i = 1
         while i <= 4 {
             say(i)
             i = i + 1
@@ -289,14 +289,14 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_do_while_loop(self):
         code = """
-        lit i = 1
+        mut lit i = 1
         do {
             say(i)
             i = i + 1
         } while i <= 3
 
         # Runs at least once even when condition initially false
-        lit j = 10
+        mut lit j = 10
         do {
             say("executed once")
             j = j + 1
@@ -334,7 +334,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_function_declaration_and_return(self):
         code = """
-        dfn add(a, b) {
+        dfn add(a, b) -> int {
             return a + b
         }
         lit result = add(10, 20)
@@ -345,7 +345,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_function_recursion(self):
         code = """
-        dfn factorial(n) {
+        dfn factorial(n) -> int {
             if n <= 1 {
                 return 1
             }
@@ -425,7 +425,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
     # ------------------ 11. V2 Features Explicitly Excluded / Updated ------------------
 
     def test_arrays_in_v2(self):
-        res = execute("lit arr = [1, 2, 3]\narr")
+        res = execute("list arr = [1, 2, 3]\narr")
         self.assertIsNone(res.error)
         self.assertEqual(res.value, [1, 2, 3])
 

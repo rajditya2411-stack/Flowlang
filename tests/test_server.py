@@ -68,7 +68,7 @@ class TestPlaygroundServer(unittest.TestCase):
             self.assertEqual(data["output"], "8")
 
     def test_api_run_while_loop(self):
-        code = "lit count = 0\nwhile count < 3 {\n    count = count + 1\n    say(count)\n}"
+        code = "mut lit count = 0\nwhile count < 3 {\n    count = count + 1\n    say(count)\n}"
         payload = json.dumps({"code": code}).encode("utf-8")
         req = urllib.request.Request(
             self.base_url + "/api/run",

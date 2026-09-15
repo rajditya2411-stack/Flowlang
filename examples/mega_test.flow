@@ -1,0 +1,214 @@
+# ==============================================================================
+# FLOWLANG V2 MEGA TEST SUITE: COMPREHENSIVE END-TO-END VERIFICATION
+# Tests V1 Primitives, V2 Collections, FlowLib Standard Library & Richer Type System
+# ==============================================================================
+
+import flowlib
+
+# ------------------------------------------------------------------------------
+# 1. RICHER TYPE SYSTEM: STATIC VARIABLE DECLARATIONS & TYPE_()
+# ------------------------------------------------------------------------------
+say("=== 1. TYPE SYSTEM & VARIABLE DECLARATIONS ===")
+int age = 25
+flt ratio = 3.14
+str lang = "FlowLang"
+char initial = 'F'
+bool active = true
+lit dynamic_val = 100
+lit absence = none
+
+say("age:", age, "| ratio:", ratio, "| lang:", lang)
+say("char:", initial, "| bool:", str_(active), "| dynamic_val:", dynamic_val)
+say("absence:", absence)
+
+# Checking declared variable types vs expression runtime types
+say("type_(age):", type_(age))
+say("type_(ratio):", type_(ratio))
+say("type_(lang):", type_(lang))
+say("type_(initial):", type_(initial))
+say("type_(active):", type_(active))
+say("type_(dynamic_val):", type_(dynamic_val))
+say("type_(absence):", type_(absence))
+say("type_(none):", type_(none))
+say("type_(10 + 2.5):", type_(10 + 2.5))
+
+# ------------------------------------------------------------------------------
+# 2. EXPLICIT TYPE CONVERSIONS & CUSTOM ROUNDING (.5 RULE)
+# ------------------------------------------------------------------------------
+say("")
+say("=== 2. EXPLICIT CONVERSIONS & CUSTOM ROUNDING ===")
+say("int_(10.5) ->", int_(10.5))
+say("int_(10.6) ->", int_(10.6))
+say("int_(10.1) ->", int_(10.1))
+say("int_(10.9) ->", int_(10.9))
+say("int_(-10.5) ->", int_(-10.5))
+say("int_(-10.6) ->", int_(-10.6))
+say("flt_(42) ->", flt_(42))
+say("str_(123) ->", str_(123))
+say("char_('A') ->", char_('A'))
+say("bool_(\"true\") ->", str_(bool_("true")))
+say("bool_(\"false\") ->", str_(bool_("false")))
+
+# Assigning lit to static int via explicit conversion int_()
+int coerced = int_(dynamic_val)
+say("coerced from lit:", coerced)
+
+# ------------------------------------------------------------------------------
+# 3. CONTROL FLOW: IF/ELIF/ELSE & LOOPS (WHILE, DO-WHILE, C-FOR)
+# ------------------------------------------------------------------------------
+say("")
+say("=== 3. CONTROL FLOW & LOOPS ===")
+
+# If / Elif / Else
+int score = 85
+if score >= 90 {
+    say("Grade: A")
+} elif score >= 80 {
+    say("Grade: B")
+} else {
+    say("Grade: C")
+}
+
+# While Loop
+mut int w_count = 3
+say("--- While Countdown ---")
+while w_count > 0 {
+    say("  w_count:", w_count)
+    w_count = w_count - 1
+}
+
+# Do-While Loop
+mut int dw_step = 0
+say("--- Do-While Loop ---")
+do {
+    say("  dw_step:", dw_step)
+    dw_step = dw_step + 1
+} while dw_step < 2
+
+# C-Style For Loop: for i in (start; cond; update)
+say("--- C-Style For Loop ---")
+for c_idx in (1; c_idx <= 3; c_idx = c_idx + 1) {
+    say("  c_idx:", c_idx)
+}
+
+# ------------------------------------------------------------------------------
+# 4. FUNCTIONS: TYPED PARAMS, MANDATORY RETURN TYPES & RECURSION
+# ------------------------------------------------------------------------------
+say("")
+say("=== 4. FUNCTIONS & RECURSION ===")
+
+dfn calculate_area(int length, int width) -> int {
+    return length * width
+}
+
+dfn factorial(int n) -> int {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+dfn greet_user(str name) -> lit {
+    say("  Welcome to FlowLang,", name)
+}
+
+say("Area (5 * 4):", calculate_area(5, 4))
+say("Factorial (5!):", factorial(5))
+greet_user("Developer")
+
+# ------------------------------------------------------------------------------
+# 5. V2 COLLECTIONS: LIST, BRACK & DICTIONARY
+# ------------------------------------------------------------------------------
+say("")
+say("=== 5. V2 COLLECTIONS ===")
+
+# Mutable List
+list scores = [70, 85, 90, 95]
+say("Initial scores:", scores)
+say("Indexing scores[0]:", scores[0], "| scores[-1]:", scores[-1])
+scores[0] = 75
+append_(scores, 100)
+say("Mutated & appended scores:", scores)
+
+# Immutable Brack & Freeze
+brack tuple_bk = (10, 20, 30)
+say("Tuple brack:", tuple_bk)
+lit frozen_list = freeze_(scores)
+say("Frozen list (brack in lit):", frozen_list)
+
+# FlowDict with << >> Syntax
+dict user = << 1: "Alice", 2: "Bob", 3: "Charlie" >>
+say("Initial dict:", user)
+user[4] = "Diana"
+say("Updated user[4]:", user[4])
+
+# Keys and Values views
+say("Dict keys view:", user.keys)
+say("Dict values view:", user.values)
+
+# Collection For-In Loops with Range Slicing
+say("--- Collection For-In (scores sliced [1; 3]) ---")
+for item in scores(1; 3) {
+    say("  item:", item)
+}
+
+say("--- Iterating Over Dict ---")
+for entry in user {
+    say("  key-value pair:", entry)
+}
+
+# ------------------------------------------------------------------------------
+# 6. FLOWLIB STANDARD LIBRARY (COLLECTIONS & STRINGS)
+# ------------------------------------------------------------------------------
+say("")
+say("=== 6. FLOWLIB STANDARD LIBRARY ===")
+
+# Collection Aggregations
+list numbers = [45, 12, 89, 23, 67]
+say("Numbers list:", numbers)
+say("min_:", min_(numbers), "| max_:", max_(numbers))
+say("sum_ all:", sum_(numbers))
+say("sum_ range (indices 1 to 3):", sum_(numbers; 1; 3))
+
+# In-place sorting & reversal
+asort_(numbers)
+say("Ascending sorted:", numbers)
+dsort_(numbers)
+say("Descending sorted:", numbers)
+rev_(numbers)
+say("Reversed list:", numbers)
+
+# Predicates & Search
+say("all_ > 0:", str_(all_(numbers)))
+say("any_ > 0:", str_(any_(numbers)))
+say("count_ 45:", count_(numbers; 45))
+say("index_ of 45:", index_(numbers; 45))
+
+# Safe dictionary get_ and in-place pop_
+say("get_(user; 1):", get_(user; 1))
+say("get_(user; 99; 'Unknown'):", get_(user; 99; "Unknown"))
+pop_(user; 3)
+say("After pop_(user; 3):", user)
+
+# String Manipulation
+str raw_text = "   flowlang v2 programming language   "
+say("raw_text:", "'" + raw_text + "'")
+str clean_text = strip_(raw_text)
+say("strip_:", clean_text)
+say("upper_:", upper_(clean_text))
+say("title_:", title_(clean_text))
+say("replace_:", replace_(clean_text; "language"; "engine"))
+say("find_ 'v2':", find_(clean_text; "v2"))
+say("startswith_ 'flow':", str_(startswith_(clean_text; "flow")))
+say("endswith_ 'language':", str_(endswith_(clean_text; "language")))
+
+# Split and Join
+list words = split_(clean_text; " ")
+say("split_ words:", words)
+str joined_str = join_(words; " -> ")
+say("join_ words:", joined_str)
+
+say("")
+say("==============================================================================")
+say("ALL FLOWLANG V1, V2 COLLECTIONS, FLOWLIB & TYPE SYSTEM CHECKS PASSED!")
+say("==============================================================================")

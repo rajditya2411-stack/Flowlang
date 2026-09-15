@@ -1,5 +1,5 @@
 # Basic While Loop
-lit i = 0
+mut lit i = 0
 while i < 5 {
     say("i =", i)
     i = i + 1

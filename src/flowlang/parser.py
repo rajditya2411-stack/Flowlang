@@ -24,6 +24,7 @@ from flowlang.ast import (
     ReturnStatement,
     ImportStatement,
     Assignment,
+    CompoundAssignment,
     BinaryOp,
     LogicalOp,
     UnaryOp,
@@ -32,6 +33,7 @@ from flowlang.ast import (
     ListLiteral,
     BrackLiteral,
     DictLiteral,
+    StructLiteral,
     IndexAccess,
     IndexAssignment,
     MemberAccess,
@@ -40,6 +42,9 @@ from flowlang.ast import (
     CharLiteral,
     BooleanLiteral,
     Identifier,
+    BreakStatement,
+    ContinueStatement,
+    StructDeclaration,
 )
 
 
@@ -151,7 +156,24 @@ class Parser:
             self._advance()
             return self._import_statement()
 
-        # Variable declarations: lit / int / flt / str / char / bool / list / brack / dict <id> = <expr>
+        if self._check(TokenType.BREAK):
+            tok = self._advance()
+            self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
+            return BreakStatement(line=tok.line, column=tok.column)
+
+        if self._check(TokenType.CONTINUE):
+            tok = self._advance()
+            self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
+            return ContinueStatement(line=tok.line, column=tok.column)
+
+        if self._check(TokenType.STRUCT):
+            self._advance()
+            return self._struct_declaration()
+
+        if self._check(TokenType.LBRACE):
+            return self._block()
+
+        # Variable declarations: (mut)? (lit | int | flt | str | char | bool | list | brack | dict | StructName) <id> = <expr>
         type_tokens = (
             TokenType.LIT,
             TokenType.INT,
@@ -163,8 +185,30 @@ class Parser:
             TokenType.BRACK,
             TokenType.DICT,
         )
+        if self._check(TokenType.IDENTIFIER) and self._peek(0).value == "none" and self._peek(1).type == TokenType.IDENTIFIER:
+            none_tok = self._peek(0)
+            raise ParserError(
+                "'none' is a runtime value, not a type; cannot declare a variable of type 'none'",
+                line=none_tok.line,
+                column=none_tok.column,
+                source_code=self.source_code,
+            )
+
+        if self._check(TokenType.MUT):
+            self._advance()
+            return self._var_declaration(is_mutable=True)
+
         if self._check_any(*type_tokens) and self._peek(1).type == TokenType.IDENTIFIER:
-            return self._var_declaration()
+            return self._var_declaration(is_mutable=False)
+
+        # Custom struct type: Name var = ...
+        if (
+            self._check(TokenType.IDENTIFIER)
+            and self._peek(1).type == TokenType.IDENTIFIER
+            and self._peek(0).value != "none"
+            and self._peek(2).type == TokenType.ASSIGN
+        ):
+            return self._var_declaration(is_mutable=False)
 
         return self._expression_statement()
 
@@ -190,10 +234,67 @@ class Parser:
             statements=statements,
         )
 
-    def _var_declaration(self) -> VariableDeclaration:
-        """var_decl -> (lit | int | flt | str | char | bool) IDENTIFIER '=' expression"""
+    def _struct_declaration(self) -> StructDeclaration:
+        """struct_decl -> 'struct' IDENTIFIER '=' '<<' (type IDENTIFIER (',' type IDENTIFIER)*)? '>>'"""
+        struct_tok = self._previous()
+        name_tok = self._consume(TokenType.IDENTIFIER, "Expected struct name after 'struct'")
+        self._consume(TokenType.ASSIGN, "Expected '=' after struct name")
+        self._consume(TokenType.LDICT, "Expected '<<' to start struct definition")
+        fields: list[tuple[str, str]] = []
+        self._skip_newlines()
+        if not self._check(TokenType.RDICT):
+            while True:
+                self._skip_newlines()
+                type_tokens = (
+                    TokenType.LIT,
+                    TokenType.INT,
+                    TokenType.FLT,
+                    TokenType.STR,
+                    TokenType.CHAR_TYPE,
+                    TokenType.BOOL_TYPE,
+                    TokenType.LIST,
+                    TokenType.BRACK,
+                    TokenType.DICT,
+                    TokenType.IDENTIFIER,
+                )
+                if self._check_any(*type_tokens):
+                    t_tok = self._advance()
+                    t_name = "char" if t_tok.type == TokenType.CHAR_TYPE else ("bool" if t_tok.type == TokenType.BOOL_TYPE else t_tok.value)
+                    f_name_tok = self._consume(TokenType.IDENTIFIER, f"Expected field name after type '{t_name}' in struct '{name_tok.value}'")
+                    fields.append((f_name_tok.value, t_name))
+                else:
+                    cur = self._peek()
+                    raise ParserError(
+                        f"Expected field type in struct definition, got '{cur.value or cur.type.name}'",
+                        line=cur.line,
+                        column=cur.column,
+                        source_code=self.source_code,
+                    )
+                self._skip_newlines()
+                if not (self._match(TokenType.COMMA) or self._match(TokenType.SEMICOLON)):
+                    break
+                self._skip_newlines()
+        self._consume(TokenType.RDICT, "Expected '>>' at end of struct definition")
+        self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
+        return StructDeclaration(
+            line=struct_tok.line,
+            column=struct_tok.column,
+            name=name_tok.value,
+            fields=fields,
+        )
+
+    def _var_declaration(self, is_mutable: bool = False) -> VariableDeclaration:
+        """var_decl -> ('mut')? (type | IDENTIFIER) IDENTIFIER '=' expression"""
         type_tok = self._advance()
-        name_tok = self._consume(TokenType.IDENTIFIER, f"Expected variable name after '{type_tok.value}'")
+        type_name = "char" if type_tok.type == TokenType.CHAR_TYPE else ("bool" if type_tok.type == TokenType.BOOL_TYPE else type_tok.value)
+        name_tok = self._consume(TokenType.IDENTIFIER, f"Expected variable name after '{type_name}'")
+        if name_tok.value == "none":
+            raise ParserError(
+                "Cannot use reserved identifier 'none' as a variable name",
+                line=name_tok.line,
+                column=name_tok.column,
+                source_code=self.source_code,
+            )
         self._consume(TokenType.ASSIGN, f"Expected '=' after variable name '{name_tok.value}'")
         initializer = self._expression()
         self._match(TokenType.SEMICOLON, TokenType.NEWLINE)
@@ -201,9 +302,10 @@ class Parser:
         return VariableDeclaration(
             line=type_tok.line,
             column=type_tok.column,
-            type_name=type_tok.value,
+            type_name=type_name,
             name=name_tok.value,
             initializer=initializer,
+            is_mutable=is_mutable,
         )
 
     def _if_statement(self) -> IfStatement:
@@ -357,23 +459,66 @@ class Parser:
         )
 
     def _dfn_statement(self) -> FunctionDeclaration:
-        """dfn_statement -> 'dfn' IDENTIFIER '(' params? ')' block"""
+        """dfn_statement -> 'dfn' IDENTIFIER '(' params? ')' '->' return_type block"""
         dfn_tok = self._previous()
         name_tok = self._consume(TokenType.IDENTIFIER, "Expected function name after 'dfn'")
         self._consume(TokenType.LPAREN, "Expected '(' after function name")
-        parameters: list[str] = []
+        parameters: list[tuple[str, str]] = []
+
+        type_tokens = (
+            TokenType.LIT,
+            TokenType.INT,
+            TokenType.FLT,
+            TokenType.STR,
+            TokenType.CHAR_TYPE,
+            TokenType.BOOL_TYPE,
+            TokenType.LIST,
+            TokenType.BRACK,
+            TokenType.DICT,
+        )
 
         self._skip_newlines()
         if not self._check(TokenType.RPAREN):
             while True:
                 self._skip_newlines()
+                type_tok = None
+                if self._check_any(*type_tokens) and self._peek(1).type == TokenType.IDENTIFIER:
+                    type_tok = self._advance()
                 param_tok = self._consume(TokenType.IDENTIFIER, "Expected parameter name")
-                parameters.append(param_tok.value)
+                param_type = type_tok.value if type_tok else "lit"
+                parameters.append((param_tok.value, param_type))
                 self._skip_newlines()
                 if not self._match(TokenType.COMMA):
                     break
 
         self._consume(TokenType.RPAREN, "Expected ')' after parameter list")
+        self._skip_newlines()
+
+        # Section 32: Return type declarations are REQUIRED
+        self._consume(TokenType.ARROW, "Expected '->' return type declaration (return types are required in V2, e.g. '-> int' or '-> lit')")
+        self._skip_newlines()
+
+        if self._check(TokenType.IDENTIFIER) and self._peek().value == "none":
+            cur = self._peek()
+            raise ParserError(
+                "The 'none' type is not a valid user-facing return type in FlowLang V2 (use '-> lit' for functions returning no value)",
+                line=cur.line,
+                column=cur.column,
+                source_code=self.source_code,
+            )
+
+        if not self._check_any(*type_tokens):
+            cur = self._peek()
+            raise ParserError(
+                f"Expected valid return type after '->', got '{cur.value or cur.type.name}'",
+                line=cur.line,
+                column=cur.column,
+                source_code=self.source_code,
+            )
+
+        return_type_tok = self._advance()
+        return_type = return_type_tok.value
+
         self._skip_newlines()
         body = self._block()
 
@@ -382,6 +527,7 @@ class Parser:
             column=dfn_tok.column,
             name=name_tok.value,
             parameters=parameters,
+            return_type=return_type,
             body=body,
         )
 
@@ -427,8 +573,34 @@ class Parser:
         return self._assignment()
 
     def _assignment(self) -> Expression:
-        """assignment -> IDENTIFIER '=' assignment | logical_or"""
+        """assignment -> IDENTIFIER ('=' | '+=' | '-=' | '*=' | '//=' | '%=') assignment | logical_or"""
         expr = self._logical_or()
+
+        compound_ops = {
+            TokenType.PLUS_EQUAL: "+=",
+            TokenType.MINUS_EQUAL: "-=",
+            TokenType.STAR_EQUAL: "*=",
+            TokenType.SLASH_SLASH_EQUAL: "//=",
+            TokenType.MODULO_EQUAL: "%=",
+        }
+        for tok_type, op_str in compound_ops.items():
+            if self._match(tok_type):
+                op_tok = self._previous()
+                value = self._assignment()
+                if isinstance(expr, (Identifier, IndexAccess)):
+                    return CompoundAssignment(
+                        line=op_tok.line,
+                        column=op_tok.column,
+                        target=expr,
+                        operator=op_str,
+                        value=value,
+                    )
+                raise ParserError(
+                    f"Invalid compound assignment target at line {op_tok.line}",
+                    line=op_tok.line,
+                    column=op_tok.column,
+                    source_code=self.source_code,
+                )
 
         if self._match(TokenType.ASSIGN):
             equals = self._previous()
@@ -500,6 +672,14 @@ class Parser:
 
         while self._match(TokenType.EQUAL, TokenType.NOT_EQUAL):
             operator = self._previous().value
+            op_tok = self._previous()
+            if isinstance(expr, BinaryOp) and expr.operator in ("<", "<=", ">", ">=", "==", "!="):
+                raise ParserError(
+                    "Chained comparisons are not supported; use 'and' (e.g., 'a == b and b == c')",
+                    line=op_tok.line,
+                    column=op_tok.column,
+                    source_code=self.source_code,
+                )
             right = self._comparison()
             expr = BinaryOp(
                 line=expr.line,
@@ -517,6 +697,14 @@ class Parser:
 
         while self._match(TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER, TokenType.GREATER_EQUAL):
             operator = self._previous().value
+            op_tok = self._previous()
+            if isinstance(expr, BinaryOp) and expr.operator in ("<", "<=", ">", ">=", "==", "!="):
+                raise ParserError(
+                    "Chained comparisons are not supported; use 'and' (e.g., 'a < b and b < c')",
+                    line=op_tok.line,
+                    column=op_tok.column,
+                    source_code=self.source_code,
+                )
             right = self._term()
             expr = BinaryOp(
                 line=expr.line,
@@ -546,10 +734,10 @@ class Parser:
         return expr
 
     def _factor(self) -> Expression:
-        """factor -> unary ( ( '*' | '/' | '%' ) unary )*"""
+        """factor -> unary ( ( '*' | '/' | '//' | '%' ) unary )*"""
         expr = self._unary()
 
-        while self._match(TokenType.STAR, TokenType.SLASH, TokenType.MODULO):
+        while self._match(TokenType.STAR, TokenType.SLASH, TokenType.SLASH_SLASH, TokenType.MODULO):
             operator = self._previous().value
             right = self._unary()
             expr = BinaryOp(
@@ -564,6 +752,15 @@ class Parser:
 
     def _unary(self) -> Expression:
         """unary -> ( '-' | 'not' ) unary | call"""
+        if self._match(TokenType.PLUS):
+            op_tok = self._previous()
+            raise ParserError(
+                "Unary '+' is not supported; positive numbers are written without a sign",
+                line=op_tok.line,
+                column=op_tok.column,
+                source_code=self.source_code,
+            )
+
         if self._match(TokenType.MINUS):
             op_tok = self._previous()
             operand = self._unary()
@@ -692,26 +889,45 @@ class Parser:
             self._consume(TokenType.RBRACKET, "Expected ']' after list elements")
             return ListLiteral(line=lbracket.line, column=lbracket.column, elements=elements)
 
-        # Dict literal: << k1: v1, k2: v2, ... >>
+        # Dict or Struct literal: << k1: v1, ... >> or << v1, v2, ... >>
         if self._match(TokenType.LDICT):
             ldict = self._previous()
-            entries: list[tuple[Expression, Expression]] = []
             self._skip_newlines()
-            if not self._check(TokenType.RDICT):
-                while True:
+            if self._check(TokenType.RDICT):
+                self._advance()
+                return DictLiteral(line=ldict.line, column=ldict.column, entries=[])
+
+            first_expr = self._expression()
+            self._skip_newlines()
+            if self._match(TokenType.COLON):
+                self._skip_newlines()
+                val_expr = self._expression()
+                entries: list[tuple[Expression, Expression]] = [(first_expr, val_expr)]
+                self._skip_newlines()
+                while self._match(TokenType.COMMA):
                     self._skip_newlines()
+                    if self._check(TokenType.RDICT):
+                        break
                     key_expr = self._expression()
                     self._skip_newlines()
                     self._consume(TokenType.COLON, "Expected ':' after dictionary key")
                     self._skip_newlines()
-                    val_expr = self._expression()
-                    entries.append((key_expr, val_expr))
+                    v_expr = self._expression()
+                    entries.append((key_expr, v_expr))
                     self._skip_newlines()
-                    if not self._match(TokenType.COMMA):
+                self._consume(TokenType.RDICT, "Expected '>>' after dictionary entries")
+                return DictLiteral(line=ldict.line, column=ldict.column, entries=entries)
+            else:
+                values: list[Expression] = [first_expr]
+                self._skip_newlines()
+                while self._match(TokenType.COMMA):
+                    self._skip_newlines()
+                    if self._check(TokenType.RDICT):
                         break
+                    values.append(self._expression())
                     self._skip_newlines()
-            self._consume(TokenType.RDICT, "Expected '>>' after dictionary entries")
-            return DictLiteral(line=ldict.line, column=ldict.column, entries=entries)
+                self._consume(TokenType.RDICT, "Expected '>>' after struct values")
+                return StructLiteral(line=ldict.line, column=ldict.column, struct_name="", values=values)
 
         # Parenthesized: empty brack (), brack literal (1, 2, ...), or grouping (expr)
         if self._match(TokenType.LPAREN):

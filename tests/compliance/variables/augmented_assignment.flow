@@ -1,5 +1,5 @@
 # Dynamic and Static Variable Operations
-lit x = 10
+mut lit x = 10
 x = x + 5
 say("x + 5:", x)
 
@@ -12,6 +12,6 @@ say("x * 2:", x)
 x = x / 4
 say("x / 4:", x)
 
-lit s = "Hello"
+mut lit s = "Hello"
 s = s + " World"
 say("string +:", s)

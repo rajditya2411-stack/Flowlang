@@ -172,7 +172,7 @@ class TestParser(unittest.TestCase):
 
     def test_dfn_statement(self):
         source = """
-        dfn add(a, b) {
+        dfn add(a, b) -> int {
             return a + b
         }
         """
@@ -180,7 +180,8 @@ class TestParser(unittest.TestCase):
         stmt = program.statements[0]
         self.assertIsInstance(stmt, FunctionDeclaration)
         self.assertEqual(stmt.name, "add")
-        self.assertEqual(stmt.parameters, ["a", "b"])
+        self.assertEqual(stmt.parameters, [("a", "lit"), ("b", "lit")])
+        self.assertEqual(stmt.return_type, "int")
         self.assertIsInstance(stmt.body.statements[0], ReturnStatement)
 
     def test_missing_brace_error(self):

@@ -5,6 +5,7 @@ callable objects, and canonical value representation.
 """
 
 from typing import Any, Callable, Optional
+from dataclasses import dataclass
 from flowlang.errors import FlowRuntimeError
 
 
@@ -14,6 +15,8 @@ class Char:
     def __init__(self, value: str):
         if len(value) != 1:
             raise ValueError("Char must be exactly one character")
+        if value.isdigit():
+            raise ValueError("Numeric characters '0'-'9' are invalid in Char in FlowLang V2")
         self.value = value
 
     def __repr__(self) -> str:
@@ -25,8 +28,6 @@ class Char:
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, Char):
             return self.value == other.value
-        if isinstance(other, str) and len(other) == 1:
-            return self.value == other
         return False
 
     def __hash__(self) -> int:
@@ -97,6 +98,22 @@ class DictValuesView:
 
     def __repr__(self):
         return f"<dict_values {list(self.dictionary.values())}>"
+
+
+@dataclass
+class StructType:
+    name: str
+    fields: list[tuple[str, str]]  # list of (field_name, type_name)
+
+
+class StructInstance:
+    def __init__(self, struct_type: StructType, fields: dict[str, Any]):
+        self.struct_type = struct_type
+        self.fields = fields
+
+    def __repr__(self) -> str:
+        f_strs = ", ".join(f"{k}: {stringify_element(v)}" for k, v in self.fields.items())
+        return f"<< {f_strs} >>"
 
 
 def parse_bk_input(raw: Any, line: int = 1, col: int = 1, source_code: Optional[str] = None) -> Brack:
@@ -225,16 +242,29 @@ def validate_dict_key(key: Any, line: int = 1, column: int = 1, source_code: Opt
 
 
 def make_independent_copy(val: Any) -> Any:
-    """Recursively creates an independent copy of mutable collections (list, dict)."""
+    """Recursively creates an independent copy of mutable collections (list, dict, StructInstance)."""
     if isinstance(val, list):
         return [make_independent_copy(item) for item in val]
     if isinstance(val, (FlowDict, dict)):
         return FlowDict({k: make_independent_copy(v) for k, v in val.items()})
+    if isinstance(val, StructInstance):
+        return StructInstance(val.struct_type, {k: make_independent_copy(v) for k, v in val.fields.items()})
+    return val
+
+
+def deep_freeze(val: Any) -> Any:
+    """Recursively converts nested lists into immutable Bracks."""
+    if isinstance(val, (list, Brack, tuple)):
+        return Brack(deep_freeze(item) for item in val)
+    if isinstance(val, (FlowDict, dict)):
+        return FlowDict({k: deep_freeze(v) for k, v in val.items()})
     return val
 
 
 def get_type_name(value: Any) -> str:
     """Returns FlowLang type name for a runtime value."""
+    if value is None:
+        return "none"
     if isinstance(value, bool):
         return "bool"
     if isinstance(value, int):
@@ -251,15 +281,19 @@ def get_type_name(value: Any) -> str:
         return "brack"
     if isinstance(value, (FlowDict, dict)):
         return "dict"
+    if isinstance(value, StructInstance):
+        return value.struct_type.name
     if isinstance(value, FlowCallable):
         return "function"
     return type(value).__name__
 
 
 def check_type_match(expected_type: Optional[str], value: Any) -> bool:
-    """Checks whether value conforms to expected_type ('lit' or None matches any)."""
-    if expected_type is None or expected_type == "lit":
+    """Checks whether value conforms to expected_type ('lit' matches any except mutable list)."""
+    if expected_type is None:
         return True
+    if expected_type == "lit":
+        return not isinstance(value, list)
     if expected_type == "int":
         return isinstance(value, int) and not isinstance(value, bool)
     if expected_type == "flt":
@@ -276,6 +310,8 @@ def check_type_match(expected_type: Optional[str], value: Any) -> bool:
         return isinstance(value, (Brack, tuple))
     if expected_type == "dict":
         return isinstance(value, (FlowDict, dict))
+    if isinstance(value, StructInstance):
+        return value.struct_type.name == expected_type
     return True
 
 
@@ -318,9 +354,17 @@ class BuiltinFunction(FlowCallable):
 class UserFunction(FlowCallable):
     """User-defined FlowLang function declared via dfn."""
 
-    def __init__(self, name: str, parameters: list[str], body: Any, closure: "Environment"):
+    def __init__(
+        self,
+        name: str,
+        parameters: list[tuple[str, str]],
+        return_type: str,
+        body: Any,
+        closure: "Environment",
+    ):
         self.name = name
         self.parameters = parameters
+        self.return_type = return_type
         self.body = body
         self.closure = closure
 
@@ -337,42 +381,103 @@ class UserFunction(FlowCallable):
             )
 
         call_env = Environment(parent=self.closure)
-        for param_name, arg_val in zip(self.parameters, arguments):
-            call_env.define(param_name, arg_val, type_name="lit")
+        for (param_name, param_type), arg_val in zip(self.parameters, arguments):
+            if param_type == "lit":
+                if isinstance(arg_val, list):
+                    raise FlowRuntimeError(
+                        f"Argument '{param_name}' declared as 'lit' cannot accept a mutable list (use freeze_() to pass as immutable brack)",
+                        line=line,
+                        column=column,
+                        source_code=interpreter.source_code,
+                    )
+            else:
+                if not check_type_match(param_type, arg_val):
+                    raise FlowRuntimeError(
+                        f"Type mismatch for argument '{param_name}': expected '{param_type}', got '{get_type_name(arg_val)}'",
+                        line=line,
+                        column=column,
+                        source_code=interpreter.source_code,
+                    )
+            call_env.define(param_name, arg_val, type_name=param_type, line=line, column=column, source_code=interpreter.source_code)
 
         previous_env = interpreter.environment
+        has_returned = False
+        ret_val = None
         try:
             interpreter.environment = call_env
             interpreter.execute_block(self.body.statements, call_env)
         except ReturnSignal as ret:
-            return ret.value
+            has_returned = True
+            ret_val = ret.value
         finally:
             interpreter.environment = previous_env
 
-        return None
+        # Enforce return type
+        if not has_returned or ret_val is None:
+            if self.return_type != "lit":
+                raise FlowRuntimeError(
+                    f"Function '{self.name}' declared return type '{self.return_type}', but produced 'none' (missing return statement)",
+                    line=line,
+                    column=column,
+                    source_code=interpreter.source_code,
+                )
+            return None
+
+        if self.return_type == "lit":
+            if isinstance(ret_val, list):
+                raise FlowRuntimeError(
+                    f"Function '{self.name}' declared return type 'lit' cannot return a mutable list (use freeze_() to return immutable brack)",
+                    line=line,
+                    column=column,
+                    source_code=interpreter.source_code,
+                )
+            return ret_val
+
+        if not check_type_match(self.return_type, ret_val):
+            raise FlowRuntimeError(
+                f"Return type mismatch: function '{self.name}' declared return type '{self.return_type}', but returned value of type '{get_type_name(ret_val)}'",
+                line=line,
+                column=column,
+                source_code=interpreter.source_code,
+            )
+
+        return ret_val
 
     def __repr__(self) -> str:
         return f"<function {self.name}>"
 
 
 class Environment:
-    """Lexical scope environment supporting nested parent scopes and type tracking."""
+    """Lexical scope environment supporting nested parent scopes, type tracking, mutability, and structs."""
 
     def __init__(self, parent: Optional["Environment"] = None):
         self.parent = parent
         self.values: dict[str, Any] = {}
         self.types: dict[str, Optional[str]] = {}
+        self.is_mutable: dict[str, bool] = {}
+        self.struct_types: dict[str, StructType] = {}
+
+    def define_struct(self, name: str, struct_type: StructType) -> None:
+        self.struct_types[name] = struct_type
+
+    def get_struct(self, name: str) -> Optional[StructType]:
+        if name in self.struct_types:
+            return self.struct_types[name]
+        if self.parent is not None:
+            return self.parent.get_struct(name)
+        return None
 
     def define(
         self,
         name: str,
         value: Any,
         type_name: Optional[str] = "lit",
+        is_mutable: bool = False,
         line: int = 1,
         column: int = 1,
         source_code: Optional[str] = None,
     ) -> None:
-        """Define a new variable in current local scope with its type constraint."""
+        """Define a new variable in current local scope with its type constraint and mutability."""
         if not check_type_match(type_name, value):
             raise FlowRuntimeError(
                 f"Type mismatch: cannot initialize variable '{name}' of type '{type_name}' with value of type '{get_type_name(value)}'",
@@ -380,8 +485,13 @@ class Environment:
                 column=column,
                 source_code=source_code,
             )
-        self.values[name] = make_independent_copy(value)
+        # Lists have shared reference semantics by default
+        if isinstance(value, list):
+            self.values[name] = value
+        else:
+            self.values[name] = make_independent_copy(value)
         self.types[name] = type_name
+        self.is_mutable[name] = is_mutable
 
     def get(self, name: str, line: int, column: int, source_code: Optional[str] = None) -> Any:
         """Retrieve variable value from current or enclosing scopes."""
@@ -399,9 +509,23 @@ class Environment:
         )
 
     def assign(self, name: str, value: Any, line: int, column: int, source_code: Optional[str] = None) -> None:
-        """Assign to an existing variable in current or enclosing scope, enforcing type safety."""
+        """Assign to an existing variable in current or enclosing scope, enforcing mutability and type safety."""
+        if name == "none":
+            raise FlowRuntimeError(
+                "Cannot assign to reserved value 'none'",
+                line=line,
+                column=column,
+                source_code=source_code,
+            )
         if name in self.values:
             expected_type = self.types.get(name, "lit")
+            if expected_type != "list" and not self.is_mutable.get(name, False):
+                raise FlowRuntimeError(
+                    f"Cannot reassign immutable variable '{name}' (declare with 'mut' to allow reassignment)",
+                    line=line,
+                    column=column,
+                    source_code=source_code,
+                )
             if not check_type_match(expected_type, value):
                 raise FlowRuntimeError(
                     f"Type mismatch: cannot assign value of type '{get_type_name(value)}' to variable '{name}' declared as '{expected_type}'",
@@ -409,7 +533,10 @@ class Environment:
                     column=column,
                     source_code=source_code,
                 )
-            self.values[name] = make_independent_copy(value)
+            if isinstance(value, list):
+                self.values[name] = value
+            else:
+                self.values[name] = make_independent_copy(value)
             return
 
         if self.parent is not None and self.parent._exists(name):
@@ -430,9 +557,25 @@ class Environment:
             return self.parent._exists(name)
         return False
 
+    def get_type(self, name: str) -> Optional[str]:
+        if name in self.types:
+            return self.types[name]
+        if self.parent is not None:
+            return self.parent.get_type(name)
+        return None
+
+    def get_mutability(self, name: str) -> bool:
+        if name in self.is_mutable:
+            return self.is_mutable[name]
+        if self.parent is not None:
+            return self.parent.get_mutability(name)
+        return False
+
 
 def stringify_element(value: Any) -> str:
     """Format an element when displayed nested inside collections."""
+    if value is None:
+        return "none"
     if isinstance(value, str):
         return f'"{value}"'
     if isinstance(value, Char):
@@ -451,6 +594,9 @@ def stringify_element(value: Any) -> str:
         if not value:
             return "<< >>"
         items = ", ".join(f"{stringify_element(k)}: {stringify_element(v)}" for k, v in value.items())
+        return f"<< {items} >>"
+    if isinstance(value, StructInstance):
+        items = ", ".join(f"{k}: {stringify_element(v)}" for k, v in value.fields.items())
         return f"<< {items} >>"
     return stringify_value(value)
 
@@ -475,6 +621,9 @@ def stringify_value(value: Any) -> str:
         if not value:
             return "<< >>"
         items = ", ".join(f"{stringify_element(k)}: {stringify_element(v)}" for k, v in value.items())
+        return f"<< {items} >>"
+    if isinstance(value, StructInstance):
+        items = ", ".join(f"{k}: {stringify_element(v)}" for k, v in value.fields.items())
         return f"<< {items} >>"
     if value is None:
         return "none"

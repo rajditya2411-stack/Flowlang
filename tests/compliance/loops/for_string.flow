@@ -1,5 +1,5 @@
 # Do-While Loop
-lit i = 1
+mut lit i = 1
 do {
     say("step:", i)
     i = i + 1

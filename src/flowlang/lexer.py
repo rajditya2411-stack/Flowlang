@@ -91,8 +91,8 @@ class Lexer:
                     )
                 continue
 
-            # Single-line comments: '#' or '//'
-            if char == "#" or (char == "/" and self._peek(1) == "/"):
+            # Single-line comments: '#' only
+            if char == "#":
                 while self._peek() is not None and self._peek() != "\n":
                     self._advance()
                 continue
@@ -120,27 +120,47 @@ class Lexer:
             # Operators
             if char == "+":
                 self._advance()
-                tokens.append(Token(TokenType.PLUS, "+", start_line, start_col))
+                if self._match("="):
+                    tokens.append(Token(TokenType.PLUS_EQUAL, "+=", start_line, start_col))
+                else:
+                    tokens.append(Token(TokenType.PLUS, "+", start_line, start_col))
                 continue
 
             if char == "-":
                 self._advance()
-                tokens.append(Token(TokenType.MINUS, "-", start_line, start_col))
+                if self._match(">"):
+                    tokens.append(Token(TokenType.ARROW, "->", start_line, start_col))
+                elif self._match("="):
+                    tokens.append(Token(TokenType.MINUS_EQUAL, "-=", start_line, start_col))
+                else:
+                    tokens.append(Token(TokenType.MINUS, "-", start_line, start_col))
                 continue
 
             if char == "*":
                 self._advance()
-                tokens.append(Token(TokenType.STAR, "*", start_line, start_col))
+                if self._match("="):
+                    tokens.append(Token(TokenType.STAR_EQUAL, "*=", start_line, start_col))
+                else:
+                    tokens.append(Token(TokenType.STAR, "*", start_line, start_col))
                 continue
 
             if char == "/":
                 self._advance()
-                tokens.append(Token(TokenType.SLASH, "/", start_line, start_col))
+                if self._match("/"):
+                    if self._match("="):
+                        tokens.append(Token(TokenType.SLASH_SLASH_EQUAL, "//=", start_line, start_col))
+                    else:
+                        tokens.append(Token(TokenType.SLASH_SLASH, "//", start_line, start_col))
+                else:
+                    tokens.append(Token(TokenType.SLASH, "/", start_line, start_col))
                 continue
 
             if char == "%":
                 self._advance()
-                tokens.append(Token(TokenType.MODULO, "%", start_line, start_col))
+                if self._match("="):
+                    tokens.append(Token(TokenType.MODULO_EQUAL, "%=", start_line, start_col))
+                else:
+                    tokens.append(Token(TokenType.MODULO, "%", start_line, start_col))
                 continue
 
             if char == "=":
@@ -364,6 +384,13 @@ class Lexer:
             )
 
         self._advance()  # closing '
+        if char_val.isdigit():
+            raise LexerError(
+                f"Numeric character '{char_val}' is not a valid char literal in FlowLang V2",
+                line=start_line,
+                column=start_col,
+                source_code=self.source,
+            )
         return Token(TokenType.CHAR, char_val, start_line, start_col)
 
     def _lex_identifier(self, start_line: int, start_col: int) -> Token:

@@ -174,6 +174,26 @@ class MemberAccess(Expression):
         return f"MemberAccess({self.target}.{self.member})"
 
 
+@dataclass
+class CompoundAssignment(Expression):
+    target: Expression
+    operator: str  # "+=", "-=", "*=", "//=", "%="
+    value: Expression
+
+    def __repr__(self) -> str:
+        return f"CompoundAssign({self.target} {self.operator} {self.value})"
+
+
+@dataclass
+class StructLiteral(Expression):
+    struct_name: str
+    values: list[Expression]
+
+    def __repr__(self) -> str:
+        vals = ", ".join(repr(v) for v in self.values)
+        return f"StructLit({self.struct_name} << {vals} >>)"
+
+
 # ==================== Statements ====================
 
 @dataclass
@@ -192,12 +212,36 @@ class ExpressionStatement(Statement):
 
 @dataclass
 class VariableDeclaration(Statement):
-    type_name: str  # "lit", "int", "flt", "str", "char", "bool"
+    type_name: str  # "lit", "int", "flt", "str", "char", "bool", or custom struct name
     name: str
     initializer: Expression
+    is_mutable: bool = False
 
     def __repr__(self) -> str:
-        return f"VarDecl({self.type_name} {self.name} = {self.initializer})"
+        mut_prefix = "mut " if self.is_mutable else ""
+        return f"VarDecl({mut_prefix}{self.type_name} {self.name} = {self.initializer})"
+
+
+@dataclass
+class BreakStatement(Statement):
+    def __repr__(self) -> str:
+        return "Break()"
+
+
+@dataclass
+class ContinueStatement(Statement):
+    def __repr__(self) -> str:
+        return "Continue()"
+
+
+@dataclass
+class StructDeclaration(Statement):
+    name: str
+    fields: list[tuple[str, str]]  # list of (field_name, type_name)
+
+    def __repr__(self) -> str:
+        f = ", ".join(f"{t} {n}" for n, t in self.fields)
+        return f"StructDecl({self.name} = << {f} >>)"
 
 
 @dataclass
@@ -267,12 +311,13 @@ class ForInStatement(Statement):
 @dataclass
 class FunctionDeclaration(Statement):
     name: str
-    parameters: list[str]
+    parameters: list[tuple[str, str]]
+    return_type: str
     body: Block
 
     def __repr__(self) -> str:
-        params = ", ".join(self.parameters)
-        return f"Dfn({self.name}({params}), body={self.body})"
+        params = ", ".join(f"{t} {n}" for n, t in self.parameters)
+        return f"Dfn({self.name}({params}) -> {self.return_type}, body={self.body})"
 
 
 @dataclass

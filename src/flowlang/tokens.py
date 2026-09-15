@@ -40,6 +40,12 @@ class TokenType(Enum):
     DO = auto()             # do
     FOR = auto()            # for
     IN = auto()             # in
+    BREAK = auto()          # break
+    CONTINUE = auto()       # continue
+
+    # Modifiers & Type Definitions
+    MUT = auto()            # mut
+    STRUCT = auto()         # struct
 
     # Function & Return Keywords
     DFN = auto()            # dfn
@@ -61,8 +67,14 @@ class TokenType(Enum):
     MINUS = auto()          # -
     STAR = auto()           # *
     SLASH = auto()          # /
+    SLASH_SLASH = auto()    # //
     MODULO = auto()         # %
     ASSIGN = auto()         # =
+    PLUS_EQUAL = auto()     # +=
+    MINUS_EQUAL = auto()    # -=
+    STAR_EQUAL = auto()     # *=
+    SLASH_SLASH_EQUAL = auto() # //=
+    MODULO_EQUAL = auto()   # %=
 
     # Comparison Operators
     EQUAL = auto()          # ==
@@ -85,6 +97,7 @@ class TokenType(Enum):
     RBRACKET = auto()       # ]
     LDICT = auto()          # <<
     RDICT = auto()          # >>
+    ARROW = auto()          # ->
 
     # Structural
     NEWLINE = auto()
@@ -111,6 +124,10 @@ KEYWORDS: dict[str, TokenType] = {
     "do": TokenType.DO,
     "for": TokenType.FOR,
     "in": TokenType.IN,
+    "break": TokenType.BREAK,
+    "continue": TokenType.CONTINUE,
+    "mut": TokenType.MUT,
+    "struct": TokenType.STRUCT,
     "dfn": TokenType.DFN,
     "return": TokenType.RETURN,
     "import": TokenType.IMPORT,

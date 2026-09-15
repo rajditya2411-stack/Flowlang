@@ -1,7 +1,7 @@
 # Nested While Loops
-lit i = 1
+mut lit i = 1
 while i <= 3 {
-    lit j = 1
+    mut lit j = 1
     while j <= 2 {
         say(i, j)
         j = j + 1
