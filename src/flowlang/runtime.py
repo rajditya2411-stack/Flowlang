@@ -15,8 +15,9 @@ class Char:
     def __init__(self, value: str):
         if len(value) != 1:
             raise ValueError("Char must be exactly one character")
-        if value.isdigit():
-            raise ValueError("Numeric characters '0'-'9' are invalid in Char in FlowLang V2")
+        code = ord(value)
+        if not (33 <= code <= 126 and not value.isdigit()):
+            raise ValueError(f"Invalid Char '{value}': must be a visible ASCII non-digit character")
         self.value = value
 
     def __repr__(self) -> str:
@@ -212,7 +213,11 @@ def parse_bk_input(raw: Any, line: int = 1, col: int = 1, source_code: Optional[
             closed = False
             while i < n:
                 if raw[i] == '\\' and i + 1 < n:
-                    c_val += raw[i + 1]
+                    escape_char = raw[i + 1]
+                    if escape_char in ("'", "\\"):
+                        c_val += escape_char
+                    else:
+                        raise FlowRuntimeError(f"Invalid escape sequence '\\{escape_char}' in character in collection input", line=line, column=col, source_code=source_code)
                     i += 2
                 elif raw[i] == "'":
                     i += 1
@@ -223,7 +228,9 @@ def parse_bk_input(raw: Any, line: int = 1, col: int = 1, source_code: Optional[
                     i += 1
             if not closed:
                 raise FlowRuntimeError(f"Unterminated character in collection input: {raw[start:]}", line=line, column=col, source_code=source_code)
-            items.append(Char(c_val) if len(c_val) == 1 else c_val)
+            if len(c_val) != 1 or not (33 <= ord(c_val) <= 126 and not c_val.isdigit()):
+                raise FlowRuntimeError(f"Invalid character in collection input: '{c_val}'", line=line, column=col, source_code=source_code)
+            items.append(Char(c_val))
 
         else:
             # Unquoted token up to comma
@@ -323,16 +330,18 @@ def get_type_name(value: Any) -> str:
     if isinstance(value, EnumValue):
         return value.enum_type.name
     if isinstance(value, FlowCallable):
-        return "function"
+        return "func"
     return type(value).__name__
 
 
 def check_type_match(expected_type: Optional[str], value: Any) -> bool:
-    """Checks whether value conforms to expected_type ('lit' matches any except mutable list)."""
+    """Checks whether value conforms to expected_type."""
     if expected_type is None:
         return True
     if expected_type == "lit":
-        return not isinstance(value, list)
+        if isinstance(value, (list, StructInstance, EnumValue, FlowCallable, FlowDict, dict)):
+            return False
+        return True
     if expected_type == "int":
         return isinstance(value, int) and not isinstance(value, bool)
     if expected_type == "flt":
@@ -340,7 +349,7 @@ def check_type_match(expected_type: Optional[str], value: Any) -> bool:
     if expected_type == "str":
         return isinstance(value, str)
     if expected_type == "char":
-        return isinstance(value, Char) or (isinstance(value, str) and len(value) == 1)
+        return isinstance(value, Char)
     if expected_type == "bool":
         return isinstance(value, bool)
     if expected_type == "list":
@@ -349,13 +358,13 @@ def check_type_match(expected_type: Optional[str], value: Any) -> bool:
         return isinstance(value, (Brack, tuple))
     if expected_type == "dict":
         return isinstance(value, (FlowDict, dict))
-    if expected_type == "function":
+    if expected_type == "func":
         return isinstance(value, FlowCallable)
     if isinstance(value, StructInstance):
         return value.struct_type.name == expected_type
     if isinstance(value, EnumValue):
         return value.enum_type.name == expected_type
-    standard_types = {"lit", "int", "flt", "str", "char", "bool", "list", "brack", "dict", "function"}
+    standard_types = {"lit", "int", "flt", "str", "char", "bool", "list", "brack", "dict", "func"}
     if expected_type not in standard_types:
         return False
     return True
@@ -446,6 +455,27 @@ class UserFunction(FlowCallable):
                         column=column,
                         source_code=interpreter.source_code,
                     )
+                if isinstance(arg_val, StructInstance):
+                    raise FlowRuntimeError(
+                        f"Argument '{param_name}' declared as 'lit' cannot accept a struct instance",
+                        line=line,
+                        column=column,
+                        source_code=interpreter.source_code,
+                    )
+                if isinstance(arg_val, EnumValue):
+                    raise FlowRuntimeError(
+                        f"Argument '{param_name}' declared as 'lit' cannot accept an enum value",
+                        line=line,
+                        column=column,
+                        source_code=interpreter.source_code,
+                    )
+                if isinstance(arg_val, FlowCallable):
+                    raise FlowRuntimeError(
+                        f"Argument '{param_name}' declared as 'lit' cannot accept a function (use 'func' type)",
+                        line=line,
+                        column=column,
+                        source_code=interpreter.source_code,
+                    )
             else:
                 if not check_type_match(param_type, arg_val):
                     raise FlowRuntimeError(
@@ -484,6 +514,27 @@ class UserFunction(FlowCallable):
             if isinstance(ret_val, list):
                 raise FlowRuntimeError(
                     f"Function '{self.name}' declared return type 'lit' cannot return a mutable list (use freeze_() to return immutable brack)",
+                    line=line,
+                    column=column,
+                    source_code=interpreter.source_code,
+                )
+            if isinstance(ret_val, StructInstance):
+                raise FlowRuntimeError(
+                    f"Function '{self.name}' declared return type 'lit' cannot return a struct instance",
+                    line=line,
+                    column=column,
+                    source_code=interpreter.source_code,
+                )
+            if isinstance(ret_val, EnumValue):
+                raise FlowRuntimeError(
+                    f"Function '{self.name}' declared return type 'lit' cannot return an enum value",
+                    line=line,
+                    column=column,
+                    source_code=interpreter.source_code,
+                )
+            if isinstance(ret_val, FlowCallable):
+                raise FlowRuntimeError(
+                    f"Function '{self.name}' declared return type 'lit' cannot return a function (use 'func' type)",
                     line=line,
                     column=column,
                     source_code=interpreter.source_code,
@@ -576,13 +627,15 @@ class Environment:
         self,
         name: str,
         value: Any,
-        type_name: Optional[str] = "lit",
+        type_name: Optional[str] = None,
         is_mutable: bool = False,
         line: int = 1,
         column: int = 1,
         source_code: Optional[str] = None,
     ) -> None:
         """Define a new variable in current local scope with its type constraint and mutability."""
+        if type_name is None:
+            type_name = "func" if isinstance(value, FlowCallable) else "lit"
         if name in self.values or name in self.struct_types or name in self.enum_types:
             if not isinstance(self.values.get(name), BuiltinFunction):
                 raise FlowRuntimeError(

@@ -351,23 +351,17 @@ class Lexer:
                     column=start_col,
                     source_code=self.source,
                 )
-            escape_map = {
-                "n": "\n",
-                "t": "\t",
-                "r": "\r",
-                '"': '"',
-                "'": "'",
-                "\\": "\\",
-                "0": "\0",
-            }
-            if escape in escape_map:
-                char_val = escape_map[escape]
+            if escape == "'":
+                char_val = "'"
+                self._advance()
+            elif escape == "\\":
+                char_val = "\\"
                 self._advance()
             else:
                 escape_col = self.column
                 self._advance()
                 raise LexerError(
-                    f"Unknown escape sequence '\\{escape}'",
+                    f"Invalid escape sequence '\\{escape}' in char literal (only '\\'' and '\\\\' are allowed)",
                     line=self.line,
                     column=escape_col,
                     source_code=self.source,
@@ -384,9 +378,25 @@ class Lexer:
             )
 
         self._advance()  # closing '
-        if char_val.isdigit():
+
+        code = ord(char_val)
+        if not (33 <= code <= 126 and not char_val.isdigit()):
+            if char_val.isdigit():
+                raise LexerError(
+                    f"Numeric character '{char_val}' is not a valid char literal",
+                    line=start_line,
+                    column=start_col,
+                    source_code=self.source,
+                )
+            if char_val == " ":
+                raise LexerError(
+                    "Space character ' ' is not a valid char literal",
+                    line=start_line,
+                    column=start_col,
+                    source_code=self.source,
+                )
             raise LexerError(
-                f"Numeric character '{char_val}' is not a valid char literal in FlowLang V2",
+                f"Character '{char_val}' is not a valid visible ASCII char literal",
                 line=start_line,
                 column=start_col,
                 source_code=self.source,

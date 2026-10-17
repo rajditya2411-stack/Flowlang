@@ -193,7 +193,7 @@ class Parser:
         if self._check(TokenType.LBRACE):
             return self._block()
 
-        # Variable declarations: (mut)? (lit | int | flt | str | char | bool | list | brack | dict | function | StructName | EnumName) <id> = <expr>
+        # Variable declarations: (mut)? (lit | int | flt | str | char | bool | list | brack | func | StructName | EnumName) <id> = <expr>
         type_tokens = (
             TokenType.LIT,
             TokenType.INT,
@@ -275,13 +275,12 @@ class Parser:
                     TokenType.BOOL_TYPE,
                     TokenType.LIST,
                     TokenType.BRACK,
-                    TokenType.DICT,
                     TokenType.FUNCTION_TYPE,
                     TokenType.IDENTIFIER,
                 )
                 if self._check_any(*type_tokens):
                     t_tok = self._advance()
-                    t_name = "char" if t_tok.type == TokenType.CHAR_TYPE else ("bool" if t_tok.type == TokenType.BOOL_TYPE else ("function" if t_tok.type == TokenType.FUNCTION_TYPE else t_tok.value))
+                    t_name = "char" if t_tok.type == TokenType.CHAR_TYPE else ("bool" if t_tok.type == TokenType.BOOL_TYPE else ("func" if t_tok.type == TokenType.FUNCTION_TYPE else t_tok.value))
                     f_name_tok = self._consume(TokenType.IDENTIFIER, f"Expected field name after type '{t_name}' in struct '{name_tok.value}'")
                     fields.append((f_name_tok.value, t_name))
                 else:
@@ -308,7 +307,7 @@ class Parser:
     def _var_declaration(self, is_mutable: bool = False) -> VariableDeclaration:
         """var_decl -> ('mut')? (type | IDENTIFIER) IDENTIFIER '=' expression"""
         type_tok = self._advance()
-        type_name = "char" if type_tok.type == TokenType.CHAR_TYPE else ("bool" if type_tok.type == TokenType.BOOL_TYPE else ("function" if type_tok.type == TokenType.FUNCTION_TYPE else type_tok.value))
+        type_name = "char" if type_tok.type == TokenType.CHAR_TYPE else ("bool" if type_tok.type == TokenType.BOOL_TYPE else ("func" if type_tok.type == TokenType.FUNCTION_TYPE else type_tok.value))
         name_tok = self._consume(TokenType.IDENTIFIER, f"Expected variable name after '{type_name}'")
         if name_tok.value == "none":
             raise ParserError(
@@ -515,7 +514,7 @@ class Parser:
                 elif type_tok.type == TokenType.BOOL_TYPE:
                     param_type = "bool"
                 elif type_tok.type == TokenType.FUNCTION_TYPE:
-                    param_type = "function"
+                    param_type = "func"
                 else:
                     param_type = type_tok.value
                 parameters.append((param_tok.value, param_type))
@@ -554,7 +553,7 @@ class Parser:
         elif return_type_tok.type == TokenType.BOOL_TYPE:
             return_type = "bool"
         elif return_type_tok.type == TokenType.FUNCTION_TYPE:
-            return_type = "function"
+            return_type = "func"
         else:
             return_type = return_type_tok.value
 

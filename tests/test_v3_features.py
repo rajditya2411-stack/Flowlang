@@ -45,17 +45,19 @@ class TestFlowLangV3Features(unittest.TestCase):
         res = self.run_code(code)
         self.assertEqual(res.output.strip(), "Status.PENDING")
 
-    def test_enum_conversions_int_and_str(self):
+    def test_enum_conversions_str_and_int_error(self):
         code = """
         enum Priority = << LOW, MEDIUM, HIGH >>
         Priority p = Priority.MEDIUM
-        say(int_(p))
         say(str_(p))
-        say(int_(Priority.LOW))
-        say(int_(Priority.HIGH))
         """
         res = self.run_code(code)
-        self.assertEqual(res.output.strip().split("\n"), ["1", "MEDIUM", "0", "2"])
+        self.assertEqual(res.output.strip(), "MEDIUM")
+
+        self.expect_error("""
+        enum Priority = << LOW, MEDIUM, HIGH >>
+        say(int_(Priority.LOW))
+        """, "int_() cannot convert enum to int (enums are opaque in FlowLang)")
 
     def test_enum_equality_strict(self):
         code = """
@@ -216,7 +218,7 @@ class TestFlowLangV3Features(unittest.TestCase):
         dfn double(int x) -> int {
             return x * 2
         }
-        function fn = double
+        func fn = double
         say(fn(21))
         """
         res = self.run_code(code)
@@ -227,7 +229,7 @@ class TestFlowLangV3Features(unittest.TestCase):
         dfn add_ten(int x) -> int {
             return x + 10
         }
-        dfn apply_fn(function f, int val) -> int {
+        dfn apply_fn(func f, int val) -> int {
             return f(val)
         }
         say(apply_fn(add_ten, 5))
@@ -240,13 +242,20 @@ class TestFlowLangV3Features(unittest.TestCase):
         dfn inc(int x) -> int { return x + 1; }
         dfn dec(int x) -> int { return x - 1; }
 
-        mut function f = inc
+        mut func f = inc
         say(f(10))
         f = dec
         say(f(10))
         """
         res = self.run_code(code)
         self.assertEqual(res.output.strip().split("\n"), ["11", "9"])
+
+    def test_lit_cannot_hold_function(self):
+        code = """
+        dfn inc(int x) -> int { return x + 1; }
+        lit f = inc
+        """
+        self.expect_error(code, "Variable 'f' declared as 'lit' cannot hold a function (use 'func' type)")
 
     # ==================== 4. Duplicate Identifier Checks ====================
 

@@ -114,11 +114,11 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_division_always_returns_float(self):
         code = """
-        lit a = 20 / 4
+        flt a = 20 / 4
         say(a)
-        lit b = 20 / 3
+        flt b = 20 / 3
         say(b > 6.6 and b < 6.7)
-        lit c = 5 / 2
+        flt c = 5 / 2
         say(c)
         """
         res = self.run_code(code)
@@ -176,8 +176,8 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_string_concatenation(self):
         code = """
-        lit x = "raj"
-        lit a = 2
+        str x = "raj"
+        int a = 2
         say(x + a)
         say(2 + x)
         say("pi: " + 3.14)
@@ -258,7 +258,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_if_elif_else(self):
         code = """
-        dfn check(val) -> lit {
+        dfn check(int val) -> lit {
             if val > 10 {
                 say("big")
             } elif val == 10 {
@@ -277,7 +277,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_while_loop(self):
         code = """
-        mut lit i = 1
+        mut int i = 1
         while i <= 4 {
             say(i)
             i = i + 1
@@ -289,14 +289,14 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_do_while_loop(self):
         code = """
-        mut lit i = 1
+        mut int i = 1
         do {
             say(i)
             i = i + 1
         } while i <= 3
 
         # Runs at least once even when condition initially false
-        mut lit j = 10
+        mut int j = 10
         do {
             say("executed once")
             j = j + 1
@@ -345,7 +345,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
 
     def test_function_recursion(self):
         code = """
-        dfn factorial(n) -> int {
+        dfn factorial(int n) -> int {
             if n <= 1 {
                 return 1
             }
@@ -382,7 +382,7 @@ class TestFlowLangV1Compliance(unittest.TestCase):
         str name = input("Enter name: ")
         int age = int(input())
         flt weight = flt(input())
-        char grade = char(input())
+        str grade = input()
         bool active = bool(input())
 
         say("name:", name)

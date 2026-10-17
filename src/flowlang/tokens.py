@@ -137,7 +137,7 @@ KEYWORDS: dict[str, TokenType] = {
     "mut": TokenType.MUT,
     "struct": TokenType.STRUCT,
     "enum": TokenType.ENUM,
-    "function": TokenType.FUNCTION_TYPE,
+    "func": TokenType.FUNCTION_TYPE,
     "dfn": TokenType.DFN,
     "return": TokenType.RETURN,
     "global": TokenType.GLOBAL,

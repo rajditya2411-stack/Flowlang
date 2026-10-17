@@ -178,9 +178,9 @@ class Interpreter:
             if isinstance(val, bool):
                 raise FlowRuntimeError("int_() cannot convert bool to int", line=line, column=col, source_code=self.source_code)
             if isinstance(val, EnumValue):
-                return val.index
+                raise FlowRuntimeError("int_() cannot convert enum to int (enums are opaque in FlowLang)", line=line, column=col, source_code=self.source_code)
             if isinstance(val, Char):
-                raise FlowRuntimeError("int_() cannot convert char to int in FlowLang V2 (deferred to V3)", line=line, column=col, source_code=self.source_code)
+                raise FlowRuntimeError("int_() cannot convert char to int", line=line, column=col, source_code=self.source_code)
             if isinstance(val, int):
                 return val
             if isinstance(val, float):
@@ -229,22 +229,6 @@ class Interpreter:
             if isinstance(args[0], EnumValue):
                 return args[0].member
             return stringify_value(args[0])
-
-        # char_(x) / char(x)
-        def builtin_char(interpreter: Any, args: list[Any], line: int, col: int) -> Char:
-            if len(args) != 1:
-                raise FlowRuntimeError("char_() takes exactly 1 argument", line=line, column=col, source_code=self.source_code)
-            val = args[0]
-            if isinstance(val, Char):
-                return val
-            if isinstance(val, str) and len(val) == 1:
-                return Char(val)
-            raise FlowRuntimeError(
-                f"char_() expected single character string, got {val!r}",
-                line=line,
-                column=col,
-                source_code=self.source_code,
-            )
 
         # bool_(x) / bool(x)
         def builtin_bool(interpreter: Any, args: list[Any], line: int, col: int) -> bool:
@@ -342,8 +326,6 @@ class Interpreter:
         self.globals.define("flt_", BuiltinFunction("flt_", builtin_flt, expected_arity=1))
         self.globals.define("str", BuiltinFunction("str", builtin_str, expected_arity=1))
         self.globals.define("str_", BuiltinFunction("str_", builtin_str, expected_arity=1))
-        self.globals.define("char", BuiltinFunction("char", builtin_char, expected_arity=1))
-        self.globals.define("char_", BuiltinFunction("char_", builtin_char, expected_arity=1))
         self.globals.define("bool", BuiltinFunction("bool", builtin_bool, expected_arity=1))
         self.globals.define("bool_", BuiltinFunction("bool_", builtin_bool, expected_arity=1))
         self.globals.define("type", BuiltinFunction("type", builtin_type, expected_arity=1))
@@ -369,6 +351,59 @@ class Interpreter:
                 source_code=self.source_code,
             )
         return cond
+
+    def _get_static_type(self, expr: Expression) -> Optional[str]:
+        curr = expr
+        while isinstance(curr, Grouping):
+            curr = curr.expression
+        if isinstance(curr, Identifier):
+            return self.environment.get_type(curr.name)
+        if isinstance(curr, CallExpression) and isinstance(curr.callee, Identifier):
+            if self.environment._exists(curr.callee.name):
+                try:
+                    fn = self.environment.get(curr.callee.name, curr.line, curr.column, self.source_code)
+                    if isinstance(fn, UserFunction):
+                        return fn.return_type
+                except Exception:
+                    pass
+        if isinstance(curr, BinaryOp):
+            lt = self._get_static_type(curr.left)
+            rt = self._get_static_type(curr.right)
+            if lt == "lit" and rt == "lit":
+                return "lit"
+        return None
+
+    def _is_lit_operand(self, expr: Expression) -> bool:
+        return self._get_static_type(expr) == "lit"
+
+    def _check_lit_to_static_assignment(self, target_name: str, target_type: str, init_expr: Expression, line: int, column: int) -> None:
+        curr = init_expr
+        while isinstance(curr, Grouping):
+            curr = curr.expression
+        if isinstance(curr, Identifier):
+            src_var_type = self.environment.get_type(curr.name)
+            if src_var_type == "lit":
+                raise FlowRuntimeError(
+                    f"Cannot directly assign 'lit' variable '{curr.name}' to statically typed variable '{target_name}' of type '{target_type}' without explicit conversion (use {target_type}_())",
+                    line=line,
+                    column=column,
+                    source_code=self.source_code,
+                )
+        elif isinstance(curr, CallExpression) and isinstance(curr.callee, Identifier):
+            if self.environment._exists(curr.callee.name):
+                try:
+                    fn = self.environment.get(curr.callee.name, line, column, self.source_code)
+                    if isinstance(fn, UserFunction) and fn.return_type == "lit":
+                        raise FlowRuntimeError(
+                            f"Cannot directly assign result of function '{curr.callee.name}' returning 'lit' to statically typed variable '{target_name}' of type '{target_type}' without explicit conversion (use {target_type}_())",
+                            line=line,
+                            column=column,
+                            source_code=self.source_code,
+                        )
+                except FlowRuntimeError:
+                    raise
+                except Exception:
+                    pass
 
     def interpret(self, program: Program) -> Any:
         try:
@@ -492,27 +527,40 @@ class Interpreter:
                             source_code=self.source_code,
                         )
             else:
-                # Guard: check if assigning a 'lit' variable directly to a statically typed variable without explicit conversion
-                if stmt.type_name != "lit" and isinstance(stmt.initializer, Identifier):
-                    init_var_type = self.environment.get_type(stmt.initializer.name)
-                    if init_var_type == "lit":
+                if stmt.type_name != "lit":
+                    self._check_lit_to_static_assignment(stmt.name, stmt.type_name, stmt.initializer, stmt.line, stmt.column)
+
+                value = self.evaluate(stmt.initializer)
+
+                if stmt.type_name == "lit":
+                    if isinstance(value, list):
                         raise FlowRuntimeError(
-                            f"Cannot directly assign 'lit' variable '{stmt.initializer.name}' to statically typed variable '{stmt.name}' of type '{stmt.type_name}' without explicit conversion (use {stmt.type_name}_())",
+                            f"Variable '{stmt.name}' declared as 'lit' cannot directly hold a mutable list (use freeze_() to store as immutable brack)",
                             line=stmt.line,
                             column=stmt.column,
                             source_code=self.source_code,
                         )
-
-                value = self.evaluate(stmt.initializer)
-
-                # Guard: lit cannot directly hold a mutable list
-                if stmt.type_name == "lit" and isinstance(value, list):
-                    raise FlowRuntimeError(
-                        f"Variable '{stmt.name}' declared as 'lit' cannot directly hold a mutable list (use freeze_() to store as immutable brack)",
-                        line=stmt.line,
-                        column=stmt.column,
-                        source_code=self.source_code,
-                    )
+                    if isinstance(value, StructInstance):
+                        raise FlowRuntimeError(
+                            f"Variable '{stmt.name}' declared as 'lit' cannot hold a struct instance",
+                            line=stmt.line,
+                            column=stmt.column,
+                            source_code=self.source_code,
+                        )
+                    if isinstance(value, EnumValue):
+                        raise FlowRuntimeError(
+                            f"Variable '{stmt.name}' declared as 'lit' cannot hold an enum value",
+                            line=stmt.line,
+                            column=stmt.column,
+                            source_code=self.source_code,
+                        )
+                    if isinstance(value, FlowCallable):
+                        raise FlowRuntimeError(
+                            f"Variable '{stmt.name}' declared as 'lit' cannot hold a function (use 'func' type)",
+                            line=stmt.line,
+                            column=stmt.column,
+                            source_code=self.source_code,
+                        )
 
             self.environment.define(
                 name=stmt.name,
@@ -567,7 +615,7 @@ class Interpreter:
         if isinstance(stmt, ForStatement):
             loop_env = Environment(parent=self.environment)
             init_val = self.evaluate(stmt.init_expr)
-            loop_env.define(stmt.target, init_val, type_name="lit", is_mutable=True, line=stmt.line, column=stmt.column, source_code=self.source_code)
+            loop_env.define(stmt.target, init_val, type_name=get_type_name(init_val), is_mutable=True, line=stmt.line, column=stmt.column, source_code=self.source_code)
 
             previous_env = self.environment
             try:
@@ -648,7 +696,7 @@ class Interpreter:
                 for item in selected:
                     loop_env.values[stmt.target] = make_independent_copy(item)
                     if stmt.target not in loop_env.types:
-                        loop_env.types[stmt.target] = "lit"
+                        loop_env.types[stmt.target] = get_type_name(item)
                         loop_env.is_mutable[stmt.target] = True
                     try:
                         last_val = self.execute(stmt.body)
@@ -675,7 +723,7 @@ class Interpreter:
                 body=stmt.body,
                 closure=self.environment,
             )
-            self.environment.define(stmt.name, fn, type_name="function", line=stmt.line, column=stmt.column, source_code=self.source_code)
+            self.environment.define(stmt.name, fn, type_name="func", line=stmt.line, column=stmt.column, source_code=self.source_code)
             return None
 
         if isinstance(stmt, ReturnStatement):
@@ -911,6 +959,16 @@ class Interpreter:
             rhs_val = self.evaluate(expr.value)
 
             if isinstance(expr.target, Identifier):
+                target_type = self.environment.get_type(expr.target.name)
+                rhs_is_lit = self._is_lit_operand(expr.value)
+                lhs_is_lit = (target_type == "lit")
+                if lhs_is_lit != rhs_is_lit:
+                    raise FlowRuntimeError(
+                        f"Cannot perform compound assignment '{expr.operator}' between 'lit' and concrete type without explicit conversion",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
                 curr_val = self.environment.get(expr.target.name, expr.line, expr.column, self.source_code)
                 new_val = self._apply_binary_op(base_op, curr_val, rhs_val, expr.line, expr.column)
                 self.environment.assign(expr.target.name, new_val, expr.line, expr.column, self.source_code)
@@ -1075,27 +1133,40 @@ class Interpreter:
                     fields_dict[f_name] = val
                 value = StructInstance(struct_type, fields_dict)
             else:
-                # Guard: check if assigning a 'lit' variable directly to a statically typed variable
-                if target_type is not None and target_type != "lit" and isinstance(expr.value, Identifier):
-                    src_var_type = self.environment.get_type(expr.value.name)
-                    if src_var_type == "lit":
+                if target_type is not None and target_type != "lit":
+                    self._check_lit_to_static_assignment(expr.name, target_type, expr.value, expr.line, expr.column)
+
+                value = self.evaluate(expr.value)
+
+                if target_type == "lit":
+                    if isinstance(value, list):
                         raise FlowRuntimeError(
-                            f"Cannot directly assign 'lit' variable '{expr.value.name}' to statically typed variable '{expr.name}' of type '{target_type}' without explicit conversion (use {target_type}_())",
+                            f"Variable '{expr.name}' declared as 'lit' cannot directly hold a mutable list (use freeze_() to store as immutable brack)",
                             line=expr.line,
                             column=expr.column,
                             source_code=self.source_code,
                         )
-
-                value = self.evaluate(expr.value)
-
-                # Guard: lit cannot directly hold a mutable list
-                if target_type == "lit" and isinstance(value, list):
-                    raise FlowRuntimeError(
-                        f"Variable '{expr.name}' declared as 'lit' cannot directly hold a mutable list (use freeze_() to store as immutable brack)",
-                        line=expr.line,
-                        column=expr.column,
-                        source_code=self.source_code,
-                    )
+                    if isinstance(value, StructInstance):
+                        raise FlowRuntimeError(
+                            f"Variable '{expr.name}' declared as 'lit' cannot hold a struct instance",
+                            line=expr.line,
+                            column=expr.column,
+                            source_code=self.source_code,
+                        )
+                    if isinstance(value, EnumValue):
+                        raise FlowRuntimeError(
+                            f"Variable '{expr.name}' declared as 'lit' cannot hold an enum value",
+                            line=expr.line,
+                            column=expr.column,
+                            source_code=self.source_code,
+                        )
+                    if isinstance(value, FlowCallable):
+                        raise FlowRuntimeError(
+                            f"Variable '{expr.name}' declared as 'lit' cannot hold a function (use 'func' type)",
+                            line=expr.line,
+                            column=expr.column,
+                            source_code=self.source_code,
+                        )
 
             self.environment.assign(expr.name, value, expr.line, expr.column, self.source_code)
             return value
@@ -1194,6 +1265,52 @@ class Interpreter:
         )
 
     def _evaluate_binary(self, expr: BinaryOp) -> Any:
+        left_type = self._get_static_type(expr.left)
+        right_type = self._get_static_type(expr.right)
+        left_is_lit = (left_type == "lit")
+        right_is_lit = (right_type == "lit")
+        left_is_concrete_var = (left_type is not None and left_type != "lit")
+        right_is_concrete_var = (right_type is not None and right_type != "lit")
+
+        if (left_is_lit and right_is_concrete_var) or (right_is_lit and left_is_concrete_var):
+            if expr.operator == "+":
+                left_val = self.evaluate(expr.left)
+                right_val = self.evaluate(expr.right)
+                if isinstance(left_val, str) or isinstance(right_val, str):
+                    raise FlowRuntimeError(
+                        "Cannot concatenate 'str' and 'lit' without explicit conversion (use str_())",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+                raise FlowRuntimeError(
+                    f"Cannot perform '{expr.operator}' between 'lit' and concrete type without explicit conversion",
+                    line=expr.line,
+                    column=expr.column,
+                    source_code=self.source_code,
+                )
+            if expr.operator in ("-", "*", "/", "//", "%"):
+                raise FlowRuntimeError(
+                    f"Cannot perform '{expr.operator}' between 'lit' and concrete type without explicit conversion",
+                    line=expr.line,
+                    column=expr.column,
+                    source_code=self.source_code,
+                )
+            if expr.operator in ("<", "<=", ">", ">="):
+                raise FlowRuntimeError(
+                    f"Comparison operator '{expr.operator}' requires operands of same comparable type; cannot compare 'lit' with concrete type without explicit conversion",
+                    line=expr.line,
+                    column=expr.column,
+                    source_code=self.source_code,
+                )
+            if expr.operator in ("==", "!="):
+                raise FlowRuntimeError(
+                    f"Operator '{expr.operator}' cannot compare 'lit' with concrete type without explicit conversion",
+                    line=expr.line,
+                    column=expr.column,
+                    source_code=self.source_code,
+                )
+
         left = self.evaluate(expr.left)
         right = self.evaluate(expr.right)
         return self._apply_binary_op(expr.operator, left, right, expr.line, expr.column)
@@ -1454,6 +1571,16 @@ class Interpreter:
                 val = self.evaluate(arg)
                 return get_type_name(val)
 
+        if isinstance(expr.callee, Identifier) and expr.callee.name in ("min", "max", "pow_"):
+            for arg in expr.arguments:
+                if self._is_lit_operand(arg):
+                    raise FlowRuntimeError(
+                        f"Cannot pass 'lit' argument to '{expr.callee.name}()' without explicit conversion (use int_() or flt_())",
+                        line=expr.line,
+                        column=expr.column,
+                        source_code=self.source_code,
+                    )
+
         callee = self.evaluate(expr.callee)
 
         if not isinstance(callee, FlowCallable):
@@ -1467,11 +1594,11 @@ class Interpreter:
 
         if isinstance(callee, UserFunction):
             for arg, (param_name, param_type) in zip(expr.arguments, callee.parameters):
-                if param_type != "lit" and isinstance(arg, Identifier):
-                    arg_type = self.environment.get_type(arg.name)
-                    if arg_type == "lit":
+                if param_type != "lit":
+                    if self._is_lit_operand(arg):
+                        arg_name = arg.name if isinstance(arg, Identifier) else "expression"
                         raise FlowRuntimeError(
-                            f"Cannot directly pass 'lit' variable '{arg.name}' to parameter '{param_name}' of type '{param_type}' without explicit conversion (use {param_type}_())",
+                            f"Cannot directly pass 'lit' variable '{arg_name}' to parameter '{param_name}' of type '{param_type}' without explicit conversion (use {param_type}_())",
                             line=expr.line,
                             column=expr.column,
                             source_code=self.source_code,

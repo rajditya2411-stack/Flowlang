@@ -29,11 +29,10 @@ class TestFlowLangV2Types(unittest.TestCase):
         bool e = true
         list f = [1, 2, 3]
         brack g = (1, 2, 3)
-        dict h = << 1: "a", 2: "b" >>
-        say(a, b, c, d, e, len_(f), len_(g), len_(h))
+        say(a, b, c, d, e, len_(f), len_(g))
         """
         res = self.run_code(code)
-        self.assertEqual(res.output.strip(), "42 3.14 hello Z true 3 3 2")
+        self.assertEqual(res.output.strip(), "42 3.14 hello Z true 3 3")
 
     def test_static_type_mismatch_declarations(self):
         # int cannot accept float or string or bool
@@ -187,17 +186,23 @@ class TestFlowLangV2Types(unittest.TestCase):
 
     def test_char_conversion(self):
         code = """
-        say(char_("A"))
-        say(char_('Z'))
+        char c = 'A'
+        say(str_(c))
         """
         res = self.run_code(code)
-        lines = res.output.strip().split("\n")
-        self.assertEqual(lines, ["A", "Z"])
+        self.assertEqual(res.output.strip(), "A")
 
-        res = execute('char_("hello")')
-        self.assertIsNotNone(res.error)
-        res = execute('char_("")')
-        self.assertIsNotNone(res.error)
+        # char_() is completely removed
+        res1 = execute('char_("hello")')
+        self.assertIsNotNone(res1.error)
+
+        # char -> int is invalid
+        res2 = execute("char c = 'A'\nint_(c)")
+        self.assertIsNotNone(res2.error)
+
+        # char -> flt is invalid
+        res3 = execute("char c = 'A'\nflt_(c)")
+        self.assertIsNotNone(res3.error)
 
     def test_bool_conversion(self):
         # Strict boolean conversion: numbers cannot be converted to bool
@@ -310,12 +315,12 @@ class TestFlowLangV2Types(unittest.TestCase):
         code = """
         lit a = 10
         lit b = "hello"
-        lit c = << 1: "a" >>
+        lit c = true
         lit d = (1, 2, 3)
-        say(a, b, len_(c), len_(d))
+        say(a, b, c, len_(d))
         """
         res = self.run_code(code)
-        self.assertEqual(res.output.strip(), "10 hello 1 3")
+        self.assertEqual(res.output.strip(), "10 hello true 3")
 
     def test_lit_cannot_hold_mutable_list(self):
         res = execute("lit x = [1, 2, 3]")
@@ -366,21 +371,26 @@ class TestFlowLangV2Types(unittest.TestCase):
         lit a = 10
         lit b = 20
         say(a + b)
-        say(a == 10)
-        say(a != 20)
+        say(a == b)
+        say(a != b)
         """
         res = self.run_code(code)
         lines = res.output.strip().split("\n")
-        self.assertEqual(lines, ["30", "true", "true"])
+        self.assertEqual(lines, ["30", "false", "true"])
+
+        # Comparing lit directly with concrete typed variable fails without explicit conversion
+        res = execute('lit a = 10\nint b = 10\nsay(a == b)')
+        self.assertIsNotNone(res.error)
 
         # Comparing lit with incompatible type still fails
-        res = execute('lit a = 10\nsay(a == "10")')
+        res = execute('lit a = 10\nlit b = "10"\nsay(a == b)')
         self.assertIsNotNone(res.error)
 
     # ------------------ 8. type_() Built-in ------------------
 
     def test_type_builtin_variables_vs_expressions(self):
         code = """
+        dfn sample_fn() -> lit { return 0; }
         lit x = 10
         int y = 20
         flt z = 3.14
@@ -389,7 +399,7 @@ class TestFlowLangV2Types(unittest.TestCase):
         bool b = true
         list l = [1, 2]
         brack bk = (1, 2)
-        dict d = << 1: "a" >>
+        func fn = sample_fn
         lit n = none
 
         # Variable identifier -> declared type
@@ -401,7 +411,7 @@ class TestFlowLangV2Types(unittest.TestCase):
         say(type_(b))
         say(type_(l))
         say(type_(bk))
-        say(type_(d))
+        say(type_(fn))
         say(type_(n))
 
         # Expressions -> runtime value type
@@ -412,7 +422,6 @@ class TestFlowLangV2Types(unittest.TestCase):
         say(type_(true))
         say(type_([1, 2, 3]))
         say(type_((1, 2, 3)))
-        say(type_(<< 1: "a" >>))
         say(type_(none))
         """
         res = self.run_code(code)
@@ -426,7 +435,7 @@ class TestFlowLangV2Types(unittest.TestCase):
             "bool",
             "list",
             "brack",
-            "dict",
+            "func",
             "lit",
             # Expressions:
             "flt",
@@ -436,7 +445,6 @@ class TestFlowLangV2Types(unittest.TestCase):
             "bool",
             "list",
             "brack",
-            "dict",
             "none",
         ])
 
