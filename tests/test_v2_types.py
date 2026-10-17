@@ -530,15 +530,30 @@ class TestFlowLangV2Types(unittest.TestCase):
         """)
         self.assertIsNotNone(res.error)
 
-        # Passing mutable list to lit parameter fails
+        # Declaring parameter as lit fails (lit not allowed as parameter type)
         res = execute("""
         dfn lit_fn(lit x) -> lit {
             return x
         }
-        lit_fn([1, 2, 3])
         """)
         self.assertIsNotNone(res.error)
-        self.assertIn("cannot accept a mutable list", res.error["message"])
+        self.assertIn("cannot be declared with dynamic type 'lit'", res.error["message"])
+
+        # Returning lit with valid concrete return values is allowed
+        res = execute("""
+        dfn make_val(int x) -> lit {
+            if x > 0 {
+                return "positive"
+            }
+            return none
+        }
+        lit a = make_val(5)
+        lit b = make_val(-1)
+        say(a)
+        say(b)
+        """)
+        self.assertIsNone(res.error)
+        self.assertEqual(res.output.strip().split("\n"), ["positive", "none"])
 
 
 if __name__ == "__main__":

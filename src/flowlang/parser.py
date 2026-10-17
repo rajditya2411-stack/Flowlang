@@ -517,6 +517,14 @@ class Parser:
                     param_type = "func"
                 else:
                     param_type = type_tok.value
+
+                if type_tok is not None and param_type == "lit":
+                    raise ParserError(
+                        f"Function parameter '{param_tok.value}' cannot be declared with dynamic type 'lit'; concrete type is required",
+                        line=type_tok.line,
+                        column=type_tok.column,
+                        source_code=self.source_code,
+                    )
                 parameters.append((param_tok.value, param_type))
                 self._skip_newlines()
                 if not self._match(TokenType.COMMA):
